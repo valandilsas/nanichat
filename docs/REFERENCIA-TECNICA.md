@@ -23,6 +23,7 @@ Documento de referencia para quien mantiene o audita Social Desk. Describe la ar
 17. [Pedir que me sigan (follow gate de confianza) — RETIRADA](#17-pedir-que-me-sigan-follow-gate-de-confianza--retirada-código-inactivo)
 18. [Adjunto del recurso por URL — RETIRADA](#18-adjunto-del-recurso-por-url--retirada-código-inactivo)
 19. [Moderación de comentarios](#19-moderación-de-comentarios)
+20. [Tutorial integrado de Conexiones](#tutorial-integrado-de-conexiones)
 
 ## 1. Arquitectura
 
@@ -72,6 +73,7 @@ En Windows los modos `0700`/`0600` no tienen efecto; la carpeta queda protegida 
 | `SOCIAL_DESK_IMPORT_ENV_PATH` | sin definir | Ruta del único archivo que lee **Importar `.env`**. Sin definir, la importación está desactivada: el endpoint responde `503 environment_import_unavailable` y la interfaz oculta el botón. |
 | `SOCIAL_DESK_LEGACY_ACCOUNTS_DIR` | sin definir | Carpeta de otra herramienta con una subcarpeta por cuenta (`run.lock`, contadores de rechazos). Sin definir, no se lee ni se escribe ninguna carpeta heredada. |
 | `SOCIAL_DESK_LEGACY_HOLD_USERNAMES` | vacía | Usuarios separados por comas que empiezan retenidos al seleccionarlos. Se normalizan (sin `@`, minúsculas); un nombre inválido detiene el arranque. |
+| `SOCIAL_DESK_FACEBOOK_PAGES` | sin definir: desactivadas | **EXPERIMENTAL.** `1` o `true` (sin distinguir mayúsculas) activan las Páginas de Facebook; cualquier otro valor las deja apagadas. Ver [Páginas de Facebook](#páginas-de-facebook-experimental-apagado-por-defecto). |
 
 Las rutas relativas se resuelven desde el directorio de trabajo; en las rutas `SOCIAL_DESK_*`, `~/` se expande a la carpeta personal. `GET /api/settings/features` → `{ envImport, legacyInterlock }` informa a la interfaz qué funciones opcionales están activas.
 
@@ -92,6 +94,7 @@ Estado global en la tabla `app_state`:
 
 - `dry_run`: `true` en una base nueva; se conserva entre reinicios.
 - `monitoring_enabled`: se fuerza a `false` en cada arranque, y todas las cuentas quedan con el monitoreo en pausa.
+- `tutorial_progress`: avance del tutorial integrado (JSON validado, sin secretos); ver [Tutorial integrado de Conexiones](#tutorial-integrado-de-conexiones). No requiere migración.
 
 ### Pérdida de la llave
 
@@ -101,7 +104,7 @@ Respalda siempre la carpeta completa (base **y** llave) con la aplicación deten
 
 ## 3. Esquema y migraciones
 
-`src/db/migrations.ts` aplica en **una sola transacción** todas las migraciones pendientes al arrancar y deja la versión en `PRAGMA user_version`. La versión actual es **18**. Una base con versión mayor que la soportada se rechaza (`Database schema version N is newer than supported version 18`), así que no hay vuelta atrás sin una copia de seguridad.
+`src/db/migrations.ts` aplica en **una sola transacción** todas las migraciones pendientes al arrancar y deja la versión en `PRAGMA user_version`. La versión actual es **19**. Una base con versión mayor que la soportada se rechaza (`Database schema version N is newer than supported version 18`), así que no hay vuelta atrás sin una copia de seguridad.
 
 | Versión | Cambio |
 | --- | --- |
@@ -123,6 +126,7 @@ Respalda siempre la carpeta completa (base **y** llave) con la aplicación deten
 | v16 | Moderación de comentarios (solo aditiva): tablas `moderation_settings`, `moderation_flags` y `moderation_actions` (solo inserción). Ver [sección 19](#19-moderación-de-comentarios). |
 | v17 | Revisión con IA: reconstruye `moderation_flags` (SQLite no puede cambiar un `CHECK`) para que `category` acepte `ai_insult`, `ai_hate`, `ai_spam` y `ai_complaint`, copiando todas las filas sin cambios; tablas nuevas `moderation_ai_settings` y `moderation_ai_jobs` (índice único parcial: un trabajo `running` por cuenta). Ver [Revisión con IA](#revisión-con-ia). |
 | v18 | Modelo local (solo aditiva): `moderation_ai_settings.local_model` (anulable), para que elegir el modelo local no pise el modelo de Gemini. Ver [Modelo local](#modelo-local). |
+| v19 | Plataforma de la cuenta (solo aditiva): `social_accounts.platform` (`TEXT NOT NULL DEFAULT 'instagram' CHECK IN ('instagram','facebook')`). Las filas existentes quedan como `instagram`. Ver [Páginas de Facebook](#páginas-de-facebook-experimental-apagado-por-defecto). |
 
 > **Importante:** respalda la carpeta de datos antes del primer arranque de cada versión que traiga migraciones.
 
@@ -626,3 +630,63 @@ API del modelo local (global a la instalación, no por cuenta; escrituras con or
 - `POST /api/moderation/ai-local/download` `{ model }` → 202 con el estado; 400 `invalid_request` (id desconocido), 409 `download_running`, `model_installed`, `insufficient_disk`.
 - `POST /api/moderation/ai-local/download/cancel` → estado (`cancelled`, el `.part` se conserva); 409 `download_not_running`.
 - `POST /api/moderation/ai-local/delete` `{ model, confirmed: true }` → estado; 400 `confirmation_required`, 409 `model_in_use` o `download_running`.
+
+## Páginas de Facebook (experimental, apagado por defecto)
+
+Base para gestionar Páginas de Facebook junto a las cuentas de Instagram. **Está apagada por defecto**: sin la variable de entorno de activación no cambia nada de lo que hace la aplicación. Guía de uso para personas: [GUIA-TOKEN-FACEBOOK.md](GUIA-TOKEN-FACEBOOK.md).
+
+- **Interruptor:** la constante `FACEBOOK_PAGES_AVAILABLE = false` en `src/services/facebook-pages-rules.ts` **no se cambia**. La activación es la variable de entorno **EXPERIMENTAL** `SOCIAL_DESK_FACEBOOK_PAGES`: solo `1` o `true` (sin distinguir mayúsculas ni espacios alrededor) la encienden; cualquier otro valor o su ausencia la dejan apagada. `loadConfig` la expone como `facebookPages` y `server.ts` la pasa como la opción `facebookPagesAvailable` a `MetaProvider`, `ConnectionService`, `Scanner`, `QueueService` y `createScheduler` (el router actúa a través de esos servicios). Las pruebas usan la misma opción.
+- **Modelo:** `social_accounts.platform` (v19) y `platform` en `AccountRef`, `DiscoveredAccount` y en las cuentas que devuelve `GET /api/accounts`. Un candidato de Instagram no lleva el campo (se asume `instagram`).
+- **Descubrimiento** (`facebook_login`, solo con el interruptor encendido): además de las cuentas de Instagram vinculadas, cada Página se devuelve como candidata con `platform: 'facebook'`, `providerAccountId` = ID de la Página, `username` = nombre de la Página, `accountType: 'PAGE'`, `relatedPageId` y capacidades `identity_read` + `page_task:*` según los `tasks` de la Página. Las Páginas sin Instagram vinculado también aparecen; una Página con Instagram vinculado produce dos candidatos que comparten el token de Página (cifrado en `account:<id>`). No se agregan endpoints nuevos de Graph. Con el interruptor apagado la salida es idéntica a la anterior.
+- **Identidad única:** el `normalized_username` de una Página es `facebook:<ID de la Página>`, de modo que jamás colisiona con un nombre de usuario de Instagram. Las reglas de conflicto («ya administrada bajo otra conexión») y de adopción de cuentas huérfanas son las mismas para ambas plataformas y los mensajes no mencionan Instagram.
+- **Apagada = inerte:** con el interruptor apagado ningún endpoint de Instagram ni de Facebook puede ejecutarse contra una cuenta `facebook`. `MetaProvider` (todas las operaciones pasan por `accountContext`, que decide por la plataforma guardada), `ConnectionService.listMedia`, `Scanner.scanMedia` y `Scheduler.start` responden `platform_not_supported` (`PlatformNotSupportedError`, HTTP 409 en la API); `startAll`, cada ciclo del Monitoreo y la cola (`nextQueued`, respuesta pública) omiten las cuentas `facebook`. La opción `facebookPagesAvailable` de `MetaProvider`, `ConnectionService`, `Scanner`, `Scheduler` y `QueueService` es lo que activa o apaga todo; sin ella (o en `false`) el comportamiento es el descrito aquí.
+
+### Motor de comentarios de Páginas (tanda 2, latente)
+
+Existe detrás del interruptor y **no se ha verificado de extremo a extremo en un entorno real**. Hechos verificados en vivo (Graph Explorer, token de Página, app en modo Live) frente a lo que no:
+
+| Operación | Endpoint (host `graph.facebook.com`, token solo en `Authorization: Bearer`) | Estado |
+| --- | --- | --- |
+| Publicaciones | `GET /{page-id}/feed?fields=id,created_time,message,permalink_url,is_published&limit=100` (se omiten las no publicadas; `media_type` guardado: `POST`, sin miniatura) | Verificado |
+| Comentarios | `GET /{post-id}/comments?filter=stream&summary=true&fields=id,message,created_time,from,can_reply_privately,can_comment,is_hidden,parent{id}&limit=100` (`filter=stream` incluye respuestas; `parent.id` las enlaza) | Verificado |
+| Releer un comentario | `GET /{comment-id}?fields=<los mismos campos>` (revalidación previa al envío) | Mismos campos verificados |
+| Respuesta privada | `POST /{page-id}/messages` con JSON `{"recipient":{"comment_id":"…"},"message":{"text":"…"}}`; éxito: `recipient_id` + `message_id` | Verificado (entregada a una persona sin rol) |
+| Botones o plantillas, leer un mensaje por ID, ocultar/borrar (`is_hidden`), respuesta pública `POST /{comment}/comments`, segundo comentario de la misma persona, semántica del comentario raíz de la Página, cabeceras de uso | — | **No verificado** |
+
+- **Autor desconocido:** las personas sin rol en la app llegan **sin `from`**. Se guardan `username` y `author_igsid` en `NULL` (las columnas ya admiten `NULL`; no hay migración) y el comentario sigue siendo elegible. Si `from` existe, `from.name` alimenta `{{username}}` (nombre visible, no un identificador) y `from.id` se guarda en `author_igsid`. `{{username}}` sin valor se elimina y la frase se ordena («Hola {{username}}, gracias» → «Hola, gracias»).
+- **Elegibilidad:** respuestas del hilo (`parent.id`) → `reply_thread`; comentario raíz de la propia Página (`from.id` = ID de la Página) → `own_authored`; `can_reply_privately: false` → `private_reply_unavailable` (revisión, no error); luego ventana de 7 días, palabra clave y respuesta del dueño como en Instagram. El valor de `can_reply_privately` se usa en el escaneo y se relee antes de enviar; no se guarda.
+- **Respuesta del dueño (sin nombres de usuario):** un comentario cuenta como respondido por la Página si en el flujo hay una respuesta cuyo `author_igsid` es el ID de la Página y cuyo `parent_id` es ese comentario (o una respuesta a una respuesta de ese hilo), o si `can_reply_privately` es `false`. Limitación: la revalidación previa al envío relee el comentario (`can_reply_privately` fresco) pero **no** vuelve a pedir sus respuestas (la lectura de respuestas por comentario no está verificada), así que una respuesta pública de la Página posterior al último escaneo no se conoce; la unicidad por comentario (`UNIQUE(account_id, comment_id)`) y Meta (un mensaje por persona) siguen siendo la red de seguridad.
+- **Envío:** igual de duradero que en Instagram (intención `SENDING` confirmada **antes** del POST; `SENT` solo con `message_id`; resultado ambiguo → `UNKNOWN_OUTCOME` sin reintento automático). Solo texto: los botones URL se agregan como líneas `<título>: <https url>` (máximo 2000 caracteres; si no cabe, rechazo definitivo `invalid_reply_payload`); nunca se envían botones postback ni respuestas rápidas.
+- **Errores de Meta (según la documentación, no todos verificados en vivo):** `100/2534025` → `comment_not_valid_for_private_reply`; `10/2534022` y `10/2018278` → `private_reply_window_closed`; `10`, `3`, `102` y `200–299` → `facebook_permission_denied`; `551` → `recipient_cannot_receive_messages`; `4`, `17`, `32`, `613` (incl. `2534040`), `80001` y HTTP 429 → `facebook_rate_limited` (`FAILED_RETRYABLE` con espera, hasta 5 intentos); `190` → `facebook_token_invalid`, `FAILED_PERMANENT` y la conexión pasa a `invalid` (cuentas pausadas, `meta_190`). Los demás 4xx son rechazos definitivos (`meta_<código>`); timeouts, red y 5xx son ambiguos. El Instagram sigue sin invalidar la conexión al enviar.
+- **Sin lectura del mensaje:** Meta no ofrece una lectura verificada de un mensaje de Facebook. Tras aceptar el envío se registra un evento `readback` con `readback_not_available_facebook` (`observed: false`, `skipped: true`), no se llama al proveedor, `POST /api/queue/:id/readback` responde `409 readback_not_available_for_platform` y `readMessage` lanza `PlatformFeatureNotSupportedError`. La confirmación es solo la aceptación con `message_id`; nada afirma una lectura verificada.
+- **Ocultar, borrar y respuesta pública:** rechazados con `platform_feature_not_supported` (sin petición a Meta); la respuesta pública de un elemento de Facebook pasa a `SKIPPED` con ese código. Los escaneos de Páginas no crean marcas de moderación. Quedan para una tanda posterior.
+- **Cadencia:** reutiliza la del Monitoreo de Instagram (publicaciones cada 5 min, cada publicación cubierta como máximo cada 2 min, tope de 25 escaneos generales por ciclo).
+
+### Interfaz para Páginas de Facebook
+
+Funciones puras en `app/platform.ts` (con pruebas en `tests/platform-ui.test.ts`); `app/page.tsx` solo las usa.
+
+- **Plataforma visible:** las cuentas de `GET /api/accounts` y del panel traen `platform`. En cuanto existe una cuenta de Facebook, el selector de cuentas, «Cuentas seleccionadas» y «Cuentas descubiertas» muestran la insignia **Instagram** o **Facebook**; una Página se muestra por su nombre (sin «@»). Mientras no haya cuentas de Facebook, la interfaz de Instagram se ve exactamente igual que antes.
+- **Texto según la plataforma:** el enlace de Publicaciones dice «Ver en Facebook» para una Página; el grupo del menú y las frases de modo (Dry Run/real) pasan a «Instagram y Facebook» solo cuando hay una Página; la ayuda de Conexiones menciona las Páginas.
+- **Conexiones:** al elegir Facebook Login aparece una nota que explica que se usa un token de usuario para encontrar Páginas y cuentas de Instagram vinculadas, que enlaza `docs/GUIA-TOKEN-FACEBOOK.md` y que dice que el soporte es experimental y necesita `SOCIAL_DESK_FACEBOOK_PAGES=1` para mostrar Páginas.
+- **Automatizaciones de una Página:** la respuesta pública está deshabilitada con «La respuesta pública aún no está disponible para Facebook» (y la interfaz nunca la envía activada); se muestra la nota «en Facebook los botones de enlace se envían como texto» y, en la vista previa, la del saludo sin nombre cuando quien comenta no tiene rol en la app.
+- **Moderación:** con una Página seleccionada se muestra un aviso de «no disponible para Facebook» en lugar de la pantalla de Moderación (el motor responde `platform_feature_not_supported`).
+- **Cola e historial:** el evento `readback_not_available_facebook` se muestra como «Facebook no permite verificar el mensaje enviado; se confirma con la respuesta de Meta» (nunca como verificado); para mensajes de una Página no se ofrecen «Verificar lectura» ni «Inspeccionar conversación» (ambos son de Instagram).
+- **Errores:** etiquetas en español para `platform_not_supported`, `platform_feature_not_supported`, `private_reply_unavailable`, `readback_not_available_for_platform`, `comment_not_valid_for_private_reply`, `private_reply_window_closed`, `facebook_permission_denied`, `recipient_cannot_receive_messages`, `facebook_rate_limited` y `facebook_token_invalid`.
+- **Pendiente:** el manual en PDF y sus capturas no incluyen Facebook y no se han regenerado.
+
+## Tutorial integrado de Conexiones
+
+Bloque **Tutorial** de la pantalla Conexiones: guía paso a paso para conseguir el token de Instagram (12 pasos) o de Facebook (13 pasos). TikTok solo muestra una tarjeta «Próximamente», sin contenido ni pasos. No cambia el comportamiento de Instagram ni de Facebook.
+
+- **Persistencia:** una sola fila de `app_state` con la clave `tutorial_progress` (sin migración). Forma: `{"version":1,"platforms":{"instagram":{"currentStep":2,"completed":["requisitos","cuenta-desarrollador"]},"facebook":{…}}}`. Plataformas permitidas: `instagram` y `facebook`; `currentStep` es un entero de 0 a 99; `completed` tiene como máximo 40 ids únicos con el patrón `^[a-z0-9-]{1,48}$`. Cualquier campo desconocido se rechaza.
+- **API:** `GET /api/tutorial-progress` → `{ progress }` (si el valor guardado falta o está corrupto devuelve el progreso vacío, nunca falla). `PUT /api/tutorial-progress` con el documento completo → `{ progress }`; un cuerpo inválido responde 400 `invalid_request` y no cambia nada. Sigue las mismas protecciones que el resto de las escrituras (host local, mismo origen, token CSRF, JSON y límite de tamaño). Otros métodos: 405 `method_not_allowed`.
+- **Código:** `app/tutorial/progress.ts` (validación y funciones puras compartidas con el servidor), `app/tutorial/content.ts` (contenido en español), `app/tutorial/view.ts` (ayudas de presentación y copiado), `app/tutorial/TutorialSection.tsx` (componente) y los estilos `.tutorial-*` de `app/globals.css`. Pruebas: `tests/tutorial-progress.test.ts`, `tests/tutorial-content.test.ts`, `tests/tutorial-view.test.ts`, `tests/tutorial-ui.test.ts`.
+- **Dónde editar el contenido:** solo `app/tutorial/content.ts`. Cada paso tiene `id`, `title`, `summary`, `whyItMatters`, `instructions`, `links`, `notes`, `expectedResult`, `screenshot`, `helpPrompt` y `verified`. Los pasos con `verified: false` muestran la insignia «Paso por verificar» y una nota honesta.
+- **Enlaces:** solo `https` y solo en `developers.facebook.com`, `business.facebook.com`, `www.facebook.com`, `www.instagram.com`, `help.instagram.com` o `about.meta.com` (`ALLOWED_LINK_HOSTS`), sin credenciales ni parámetros. Una prueba lo comprueba. Los enlaces se abren en una pestaña nueva con `rel="noopener noreferrer"`. No se inventan enlaces profundos: solo los que ya cita el manual o la guía de Facebook.
+- **Prompt de ayuda:** cada paso trae un texto en español, listo para copiar, con el paso, el objetivo, marcadores `[REEMPLAZA: …]` y reglas de seguridad obligatorias (nunca pedir ni aceptar tokens, secretos ni contraseñas; verificar en la documentación oficial; un paso a la vez). El botón «Copiar prompt» usa `navigator.clipboard` y, si falla, un `textarea` con `execCommand`.
+- **Ilustraciones y capturas:** cada paso tiene un hueco (`screenshot`). Con `file` se muestra una imagen (`<img>`, nunca SVG incrustado); sin `file` muestra «Captura pendiente». Solo se aceptan rutas `/tutorial/<plataforma>/<paso>.(svg|png|jpg|jpeg|webp)`; Next.js sirve únicamente `public/` de la raíz del proyecto. `pending` es `true` exactamente cuando no hay `file`.
+  - **Esquemas (`public/tutorial/<plataforma>/<id-del-paso>.svg`):** dibujos originales, sin imágenes de terceros ni logotipos, con marco de ventana, bloques neutros, llamadas numeradas sobre el botón o campo a usar y el pie «Esquema ilustrativo — tu pantalla puede verse distinta». Usan solo etiquetas vistas en el panel de Meta en español o, si no se observaron, un flujo de cajas y flechas marcado «Esquema por verificar» (obligatorio cuando el paso tiene `verified: false`). La interfaz añade bajo la imagen «Esquema ilustrativo, no es una captura real».
+  - **Reglas del SVG (las comprueba `tests/tutorial-svg.test.ts`):** XML bien formado, `viewBox="0 0 800 450"`, fondo sólido propio, `<title>` y `<desc>`, `role="img"`, `font-family` `system-ui`; sin `<script>`, `<image>`, `<style>`, `<foreignObject>`, `href`, `xlink:`, `url(http…)`, manejadores `on…`, URLs externas, correos, tokens ni números largos (≥ 9 cifras); y ningún archivo huérfano en `public/tutorial/`.
+  - **Cómo añadir uno:** crea el SVG con el nombre del paso, ponlo en `public/tutorial/<plataforma>/<id>.svg` y declara `screenshot: schematic('<plataforma>', '<id>', alt, pie)` en `content.ts`. Una captura real solo se añade censurada (sin tokens, IDs, nombres ni correos) y con la autorización del humano: el repositorio es público.
+- **Pendiente:** los pasos con `verified: false` (cuenta profesional de Instagram, cuenta de desarrollador, portafolio comercial, probador de Instagram, token de Instagram y canje de larga duración) se confirman con el panel real; el portafolio comercial es opcional salvo acceso avanzado o `business_management`. Las capturas reales requieren autorización y censura.

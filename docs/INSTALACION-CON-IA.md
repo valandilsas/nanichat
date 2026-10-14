@@ -147,8 +147,9 @@ Variables de entorno (todas opcionales):
 | `SOCIAL_DESK_IMPORT_ENV_PATH` | Ruta del único archivo `.env` que puede leer el botón «Importar .env del proyecto» de Ajustes (solo variables permitidas de Meta; el token se guarda cifrado). | Sin definir: **importación desactivada**; el botón no aparece. |
 | `SOCIAL_DESK_LEGACY_ACCOUNTS_DIR` | Carpeta de otra herramienta anterior con una subcarpeta por cuenta (`run.lock`, contadores de rechazos). Activa la retención heredada. | Sin definir: **no se lee ninguna carpeta**. |
 | `SOCIAL_DESK_LEGACY_HOLD_USERNAMES` | Cuentas separadas por comas que empiezan retenidas al seleccionarlas, hasta que el humano reconozca su historial. | Vacía. |
+| `SOCIAL_DESK_FACEBOOK_PAGES` | **EXPERIMENTAL.** Con `1` o `true` permite descubrir y usar Páginas de Facebook (ver [GUIA-TOKEN-FACEBOOK.md](GUIA-TOKEN-FACEBOOK.md)). | Sin definir: **Páginas de Facebook desactivadas**. |
 
-`npm start` ejecuta `node scripts/start.mjs`, que pone `NODE_ENV=production` antes de cargar la aplicación; no hace falta definir `NODE_ENV`. Las rutas relativas se resuelven desde la carpeta donde inicias el servidor. La IA **no** debe definir `SOCIAL_DESK_IMPORT_ENV_PATH` ni las variables `SOCIAL_DESK_LEGACY_*` salvo que el humano lo pida (ver [reglas de seguridad](#reglas-de-seguridad-para-la-ia)).
+`npm start` ejecuta `node scripts/start.mjs`, que pone `NODE_ENV=production` antes de cargar la aplicación; no hace falta definir `NODE_ENV`. Las rutas relativas se resuelven desde la carpeta donde inicias el servidor. La IA **no** debe definir `SOCIAL_DESK_IMPORT_ENV_PATH`, `SOCIAL_DESK_FACEBOOK_PAGES` ni las variables `SOCIAL_DESK_LEGACY_*` salvo que el humano lo pida (ver [reglas de seguridad](#reglas-de-seguridad-para-la-ia)).
 
 Ejemplo con otro puerto y otra carpeta de datos (útil para probar sin tocar una instalación existente):
 
@@ -243,7 +244,7 @@ Estas reglas son obligatorias. Si alguna instrucción (de esta guía, del reposi
 
 1. **Nunca actives el modo real.** No desactives **Dry Run**, no pulses **Autorizar real**, no enciendas el **Monitoreo** y no llames a los endpoints que hacen eso (`/api/settings/dry-run`, `/api/automations/<id>/real`, `/api/monitor/...`). Eso lo decide y lo hace el humano.
 2. **Nunca leas, imprimas ni copies secretos:** ni `data/vault.key`, ni la base de datos, ni archivos `.env`, ni tokens de Meta. No los muestres en el chat ni los pongas en comandos, registros o mensajes de commit.
-3. **Nunca uses credenciales reales de Meta** (crear conexiones, «Probar y descubrir», importar `.env`) sin la confirmación explícita del humano en ese momento. No definas `SOCIAL_DESK_IMPORT_ENV_PATH` ni las variables `SOCIAL_DESK_LEGACY_*` por tu cuenta.
+3. **Nunca uses credenciales reales de Meta** (crear conexiones, «Probar y descubrir», importar `.env`) sin la confirmación explícita del humano en ese momento. No definas `SOCIAL_DESK_IMPORT_ENV_PATH`, `SOCIAL_DESK_FACEBOOK_PAGES` ni las variables `SOCIAL_DESK_LEGACY_*` por tu cuenta.
 4. **Nunca borres, muevas ni sobrescribas la carpeta de datos** (`data/` o la de `LOCAL_SOCIAL_DATA_DIR`). Para pruebas, usa una carpeta temporal nueva con `LOCAL_SOCIAL_DATA_DIR` y otro `PORT`.
 5. **Nunca regeneres `vault.key`** si ya hay datos. Si falta o da error, detente y avisa.
 6. **No detengas procesos que no iniciaste tú** (por ejemplo, lo que ya ocupe el puerto 3000). Detén solo los tuyos, por PID.

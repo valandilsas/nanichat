@@ -1,4 +1,4 @@
-import { AccountAdoptionRequiredError } from '../core/errors.ts';
+import { AccountAdoptionRequiredError, PlatformFeatureNotSupportedError, PlatformNotSupportedError } from '../core/errors.ts';
 import { randomBytes } from 'node:crypto';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { DatabaseSync } from 'node:sqlite';
@@ -17,6 +17,7 @@ import type { ImportedMetaEnvironment } from '../security/env-import.ts';
 import * as moderation from '../services/moderation.ts';
 import { ModerationAiServiceError, type ModerationAiService } from '../services/moderation-ai.ts';
 import { LocalModelError, type LocalModelManager } from '../services/moderation-ai-local-model.ts';
+import { TUTORIAL_PROGRESS_KEY, parseStoredProgress, validateProgress } from '../../app/tutorial/progress.ts';
 
 const BODY_LIMIT = 64 * 1024;
 const PAGE_LIMIT = 100;
@@ -88,7 +89,7 @@ export function createApiHandler(deps: ApiDependencies) {
       if (error instanceof QueueReadbackError) return send(response, error.status, { error: error.code });
       const status = error instanceof ApiError ? error.status : error instanceof TypeError ? 400 : 409;
       const code = error instanceof ApiError ? error.code
-        : error instanceof AccountAdoptionRequiredError ? error.code
+        : error instanceof AccountAdoptionRequiredError || error instanceof PlatformNotSupportedError || error instanceof PlatformFeatureNotSupportedError ? error.code
         : error instanceof FollowGateConfigError || error instanceof ResourceAttachmentError || error instanceof InteractiveModeRetiredError ? error.code
           : error instanceof TypeError ? 'invalid_request' : 'operation_rejected';
       send(response, status, { error: code });
@@ -121,6 +122,21 @@ async function route(
   const path = url.pathname;
   if (path === '/api/session' && method === 'GET') return send(response, 200, { csrfToken });
   if (path === '/api/health' && method === 'GET') return send(response, 200, { status: 'ok', ready: true });
+  if (path === '/api/tutorial-progress') {
+    // Tutorial progress (no secrets): one validated JSON document in app_state; corrupt storage reads as empty.
+    if (method === 'GET') {
+      const row = db.prepare(`SELECT state_value FROM app_state WHERE state_key=?`).get(TUTORIAL_PROGRESS_KEY) as { state_value: string } | undefined;
+      return send(response, 200, { progress: parseStoredProgress(row?.state_value) });
+    }
+    if (method === 'PUT') {
+      const progress = validateProgress(body);
+      db.prepare(`INSERT INTO app_state(state_key, state_value, updated_at) VALUES (?, ?, ?)
+        ON CONFLICT(state_key) DO UPDATE SET state_value=excluded.state_value, updated_at=excluded.updated_at`)
+        .run(TUTORIAL_PROGRESS_KEY, JSON.stringify(progress), new Date().toISOString());
+      return send(response, 200, { progress });
+    }
+    throw new ApiError(405, 'method_not_allowed');
+  }
   if (path === '/api/dashboard' && method === 'GET') return send(response, 200, dashboard(db, accountFilter(url)));
   if (path === '/api/connections' && method === 'GET') {
     const selected = accountFilter(url);
@@ -517,7 +533,7 @@ function listOrphanedAccounts(db: DatabaseSync) {
 
 function listAccounts(db: DatabaseSync, selected?: string): Array<Record<string, unknown> & { accountId: string }> {
   const rows = db.prepare(`SELECT account_id AS accountId, connection_id AS connectionId, provider_account_id AS providerAccountId,
-      username, display_name AS displayName, account_type AS accountType, related_page_id AS relatedPageId, status,
+      username, display_name AS displayName, account_type AS accountType, related_page_id AS relatedPageId, platform, status,
       monitoring_paused AS monitoringPaused,
       (SELECT reason_code FROM account_send_holds WHERE account_id=social_accounts.account_id) AS sendHoldReason
       FROM social_accounts ${selected ? 'WHERE account_id=?' : ''} ORDER BY username, account_id`)

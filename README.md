@@ -12,6 +12,7 @@ Todo corre en tu máquina: la interfaz web, la base de datos, la bóveda de cred
 - [Estado y límites](#estado-y-límites)
 - [Moderación de comentarios](#moderación-de-comentarios)
 - [Funciones probadas y retiradas](#funciones-probadas-y-retiradas)
+- [Facebook (experimental)](#facebook-experimental)
 - [Instalador para Windows](#instalador-para-windows)
 - [Requisitos](#requisitos)
 - [Inicio rápido](#inicio-rápido)
@@ -94,6 +95,16 @@ Todo corre en tu máquina: la interfaz web, la base de datos, la bóveda de cred
 - **Por qué se retiró:** Meta no cuenta ese toque (en un hilo iniciado por la cuenta con una respuesta privada, visto por una aplicación que solo sondea) como un mensaje de la persona que abra la ventana de 24 horas. Resultado: quien tocaba el botón **no recibía nada**. Activa, la función hacía daño.
 - **Qué queda:** el código está inactivo detrás de un único interruptor (`FOLLOW_GATE_AVAILABLE = false` en `src/services/follow-gate-rules.ts`). Una automatización antigua con estas opciones envía su mensaje normal; los elementos en cola con el botón quedan `SKIPPED` (`follow_gate_retired`); los seguimientos que esperaban un toque quedan `CANCELLED` sin llamar a Meta; el historial de las pruebas sigue visible en «Cola e historial».
 - **Qué haría falta para una versión futura:** recibir el toque por **webhooks** (evento `messaging_postbacks`) en un servidor accesible desde internet, comprobar en vivo que así Meta sí abre la ventana de mensajería y, solo entonces, cambiar el interruptor. Que los webhooks lo resuelvan es una **hipótesis no verificada**.
+
+## Facebook (experimental)
+
+Además de Instagram, la aplicación puede responder por mensaje privado a los comentarios de una **Página de Facebook**. Es **experimental** y está **apagada por defecto**.
+
+- **Cómo activarla:** inicia la aplicación con `SOCIAL_DESK_FACEBOOK_PAGES=1` (ver [Variables de entorno](#variables-de-entorno)). Después, en Conexiones, usa Facebook Login con un token de usuario, «Probar y descubrir» y «Seleccionar» la Página. La guía paso a paso para conseguir el token está en [docs/GUIA-TOKEN-FACEBOOK.md](docs/GUIA-TOKEN-FACEBOOK.md).
+- **Qué funciona (verificado en vivo, 2026-10-14):** leer publicaciones y comentarios de la Página, incluidos los de personas sin rol en tu app (llegan sin autor, así que `{{username}}` se reemplaza por un saludo limpio), y enviar una respuesta privada a esas personas.
+- **Qué no funciona o no está verificado:** respuesta pública, moderación (ocultar o borrar), lectura verificada del mensaje enviado (Meta no la permite; la interfaz lo dice), botones (los enlaces van como texto), segundo comentario de la misma persona, webhooks y límites de uso.
+- **Reglas de Meta que siguen igual:** una respuesta privada por persona, ventana de 7 días, y si otra herramienta (por ejemplo, Meta Business Suite) responde a los mismos comentarios compite por esa única respuesta: desactívala antes.
+- Todo empieza en **Dry Run**, como con Instagram. El manual en PDF y sus capturas todavía no incluyen Facebook.
 
 ## Instalador para Windows
 
@@ -199,6 +210,7 @@ Todas son opcionales. Sin ninguna, la aplicación usa el puerto `3000`, la carpe
 | `SOCIAL_DESK_IMPORT_ENV_PATH` | sin definir: **importación desactivada** | Ruta del único archivo `.env` que puede leer el botón «Importar .env del proyecto» (Ajustes). Solo se leen variables permitidas de Meta (`INSTAGRAM_ACCESS_TOKEN`, `META_APP_ID`, `GRAPH_API_VERSION`, …); el token se guarda cifrado. Sin la variable, el botón no aparece y Ajustes muestra cómo activarlo. |
 | `SOCIAL_DESK_LEGACY_ACCOUNTS_DIR` | sin definir: **no se lee ninguna carpeta** | Solo si usaste antes otra herramienta que guarda una carpeta por cuenta con `run.lock` y contadores de rechazos (`rejection-counter.json` y similares). Con ella, una cuenta con bloqueo o historial de rechazos empieza retenida y no envía hasta que reconozcas su historial; mientras envía, la aplicación crea y respeta `run.lock` en esa carpeta. |
 | `SOCIAL_DESK_LEGACY_HOLD_USERNAMES` | vacía | Lista separada por comas de cuentas (`cuenta_uno,cuenta_dos`) que empiezan **retenidas** al seleccionarlas, aunque no haya contador; se liberan con «Revisar estado y reconocer» en Conexiones. |
+| `SOCIAL_DESK_FACEBOOK_PAGES` | sin definir: **Páginas de Facebook desactivadas** | **EXPERIMENTAL.** Con `1` o `true` (mayúsculas o minúsculas), «Probar y descubrir» con Facebook Login también lista tus Páginas de Facebook y la aplicación puede leer sus comentarios y enviar respuestas privadas. Cualquier otro valor lo deja apagado. Ver [Facebook (experimental)](#facebook-experimental) y [docs/GUIA-TOKEN-FACEBOOK.md](docs/GUIA-TOKEN-FACEBOOK.md). |
 | `SOCIAL_DESK_HOME` | `%LOCALAPPDATA%\SocialDesk` | **Solo el lanzador del instalador de Windows** (no la aplicación): carpeta base de `data`, `logs` y `run`. Pensada para pruebas; el lanzador fija `LOCAL_SOCIAL_DATA_DIR` y `PORT` a partir de ella. |
 | `SOCIAL_DESK_NONINTERACTIVE` | sin definir | **Solo el lanzador de Windows**: con `1`, `launch.ps1`/`stop.ps1` no muestran cuadros de diálogo (pruebas automáticas). |
 
@@ -209,6 +221,7 @@ Las rutas relativas se resuelven desde la carpeta donde inicias el servidor; en 
 El [manual de usuario](#manual-de-usuario-pdf) explica cada pantalla con capturas. En resumen:
 
 1. **Conexiones:** crea una conexión con un nombre, el tipo de inicio de sesión (Instagram Login o Facebook Login), la versión de Graph API y tu token de acceso (`TU_TOKEN`). El token se envía una sola vez y nunca se vuelve a mostrar.
+   **Tutorial integrado:** en **Conexiones**, el bloque **Tutorial** te guía paso a paso (Instagram o Facebook; TikTok aparece como «Próximamente») desde la cuenta de desarrollador de Meta hasta pegar el token. Recuerda dónde te quedaste, cada paso trae enlaces oficiales y un «Prompt de ayuda» para copiar a tu IA (sin tokens ni secretos). Los pasos marcados «Paso por verificar» aún no están confirmados con la documentación de Meta.
 2. Pulsa **Probar y descubrir**, revisa las cuentas encontradas (por ejemplo `@tu_cuenta`) y selecciona la que quieres administrar.
    Si eliminaste o desconectaste una conexión y vuelves a conectar la misma cuenta con una conexión nueva, **Seleccionar** te ofrecerá **Adoptar**: la cuenta conserva su historial, cola y automatizaciones. Solo se pueden adoptar cuentas de conexiones desconectadas o eliminadas, y siempre con confirmación. Ajustes lista esas cuentas.
 3. **Publicaciones:** pulsa **Actualizar publicaciones** para traer tus publicaciones.

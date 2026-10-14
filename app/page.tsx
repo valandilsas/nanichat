@@ -19,12 +19,18 @@ import {
 import { House, Plug, PlugZap, Images, Zap, Radio, Inbox, History, Settings2, CheckCircle2, AlertTriangle, XCircle, Circle, Image as ImageIcon, Clapperboard, Layers, RefreshCw, Pencil, Pause, Play, Archive, Trash2, Unplug, Search, ExternalLink, ShieldCheck, ShieldOff, Plus, ChevronRight, ShieldAlert, Eye, EyeOff, Sparkles, KeyRound, Download, Cpu, ChevronsUpDown, FlaskConical, MessageCircleHeart, Menu, X, Siren, ArrowRight, Send, Clock, Flag, Check, ScanEye, Undo2, ListFilter, FileDown, Lock, Rocket, ArrowLeft, BellDot, Users, Sun, Moon, CircleHelp } from 'lucide-react';
 import { AiRowSlot, PageActions, SlotContext } from './components/slots';
 import { Nani } from './components/Nani';
+import { TutorialSection } from './tutorial/TutorialSection';
 import { LiveFlow } from './components/LiveFlow';
 import { ModerationDeck } from './components/ModerationDeck';
 import { type NaniState, accountErrorLabel, accountProblems, coverageLabel, enabledKeywords, flowEntries, heroCopy, naniState, watchedPosts } from './nani-labels';
+import {
+  FACEBOOK_BUTTONS_NOTE, FACEBOOK_LOGIN_HELP, FACEBOOK_MODERATION_UNAVAILABLE, FACEBOOK_PUBLIC_REPLY_UNAVAILABLE, FACEBOOK_USERNAME_FALLBACK_NOTE,
+  FACEBOOK_READBACK_CODE, FACEBOOK_READBACK_NOTE, PLATFORM_ERROR_LABELS, accountHandle, accountHandleOrFallback, connectionsSubtitle, navGroupLabel, platformBadge, platformOf, readbackHint, sentTargetLabel, viewPostLabel,
+} from './platform';
 import { PUBLIC_REPLY_SAMPLE_USERNAME, describePublicReply, parseVariantLines, previewExamples, publicReplyErrorHint, type PublicReplyDto, variantCountLabel } from './public-reply';
 
-type Account = { accountId: string; connectionId: string; username: string; status: string; monitoringPaused: boolean; sendHoldReason?: string | null; last_sync?: string; last_error?: string; coverage?: string };
+type Account = { accountId: string; connectionId: string; username: string; platform?: string; status: string; monitoringPaused: boolean; sendHoldReason?: string | null; last_sync?: string; last_error?: string; coverage?: string };
+type Candidate = { connectionId: string; providerAccountId: string; username: string; platform?: string };
 type Connection = { id: string; name: string; login_kind: string; app_id?: string | null; graph_version: string; status: string; last_validated_at: string | null };
 type Media = { accountId: string; mediaId: string; permalink?: string; publishedAt?: string; caption?: string | null; mediaType?: string | null; thumbnailUrl?: string | null };
 type ScanJob = { id: string; status: string; createdAt?: string; result?: any; progress?: ScanProgressDto; errorCode?: string };
@@ -90,7 +96,7 @@ export default function HomePage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
-  const [candidates, setCandidates] = useState<Array<{ connectionId: string; providerAccountId: string; username: string }>>([]);
+  const [candidates, setCandidates] = useState<Array<Candidate>>([]);
   const [scanJob, setScanJob] = useState<ScanJob | null>(null);
   const [dialog, setDialog] = useState<(ConfirmOptions & { resolve(value: boolean): void }) | null>(null);
   const [features, setFeatures] = useState<Features>(DISABLED_FEATURES);
@@ -224,7 +230,7 @@ export default function HomePage() {
   // Real mode is only ever shown when the server explicitly said dryRun === false.
   const mode: 'checking' | 'dry' | 'real' = dashboard?.dryRun === true ? 'dry' : dashboard?.dryRun === false ? 'real' : 'checking';
   const current = sections.find(([id]) => id === section) ?? sections[0];
-  const accountLabel = accountFilter === 'all' ? 'Todas las cuentas' : `@${accounts.find((item) => item.accountId === accountFilter)?.username ?? 'Cuenta'}`;
+  const accountLabel = accountFilter === 'all' ? 'Todas las cuentas' : accountHandleOrFallback(accounts.find((item) => item.accountId === accountFilter));
 
   async function toggleDryRun() {
     if (!dashboard || mode === 'checking') return;
@@ -237,6 +243,8 @@ export default function HomePage() {
     await act(() => api('/api/settings/dry-run', 'POST', { enabled, confirmed: !enabled }), enabled ? 'Dry Run quedó activo.' : 'Modo real habilitado; no se procesó la cola simulada.');
   }
 
+  const pickerAccounts = allAccounts.length ? allAccounts : accounts;
+  const selectedAccount = accounts.find((item) => item.accountId === accountFilter) ?? allAccounts.find((item) => item.accountId === accountFilter);
   const selectedUsername = accounts.find((item) => item.accountId === accountFilter)?.username ?? allAccounts.find((item) => item.accountId === accountFilter)?.username;
   const accountTotal = (allAccounts.length ? allAccounts : accounts).length;
   function go(id: string) { setSection(id); setNavOpen(false); }
@@ -253,13 +261,13 @@ export default function HomePage() {
           <button type="button" className="btn-icon ghost drawer-close" aria-label="Cerrar menú" onClick={() => setNavOpen(false)}><X size={18} /></button></div>
         <label className="account-switch">
           <RingAvatar username={selectedUsername} />
-          <span className="account-switch-text"><b>{accountFilter === 'all' ? 'Todas las cuentas' : `@${selectedUsername ?? 'Cuenta'}`}</b><small>{accountTotal} {accountTotal === 1 ? 'cuenta' : 'cuentas'}</small></span>
+          <span className="account-switch-text"><b>{accountFilter === 'all' ? 'Todas las cuentas' : accountHandleOrFallback(selectedAccount)}</b><small>{accountTotal} {accountTotal === 1 ? 'cuenta' : 'cuentas'}</small></span>
           <ChevronsUpDown size={16} aria-hidden="true" className="account-switch-icon" />
-          <select aria-label="Filtrar por cuenta" value={accountFilter} onChange={(event) => chooseAccount(event.target.value)}><option value="all">Todas las cuentas</option>{(allAccounts.length ? allAccounts : accounts).map((account) => <option key={account.accountId} value={account.accountId}>@{account.username}</option>)}</select>
+          <select aria-label="Filtrar por cuenta" value={accountFilter} onChange={(event) => chooseAccount(event.target.value)}><option value="all">Todas las cuentas</option>{pickerAccounts.map((account) => <option key={account.accountId} value={account.accountId}>{accountHandle(account)}{platformBadge(account, pickerAccounts) ? ` · ${platformBadge(account, pickerAccounts)}` : ''}</option>)}</select>
         </label>
         <nav className="side-nav" aria-label="Navegación principal">
           {NAV_GROUPS.map((group) => <div className="nav-group" key={group.label ?? 'top'}>
-            {group.label && <span className="nav-label">{group.label}</span>}
+            {group.label && <span className="nav-label">{group.label === 'Instagram' ? navGroupLabel(pickerAccounts) : group.label}</span>}
             {group.ids.map((id) => {
               const entry = sections.find(([sectionId]) => sectionId === id)!;
               const Icon = TAB_ICONS[id] || Circle;
@@ -274,14 +282,14 @@ export default function HomePage() {
               ? <button className="mode-pill checking-pill" disabled aria-disabled="true">Verificando modo…</button>
               : <button className={mode === 'dry' ? 'mode-pill dry-pill' : 'mode-pill real-pill'} title={mode === 'dry' ? 'Cambiar a modo real (pide confirmación)' : 'Volver a Dry Run'} onClick={() => void toggleDryRun()}>{mode === 'dry' ? 'Dry Run · Activo' : 'Modo real · Activo'}</button>}
           </span>
-          <p>{mode === 'dry' ? 'Nani practica: simula las respuestas, no envía nada a Instagram.' : mode === 'real' ? 'Nani envía mensajes privados reales a Instagram.' : 'Un momento…'}</p>
+          <p>{mode === 'dry' ? 'Nani practica: simula las respuestas, no envía nada a ' + sentTargetLabel(pickerAccounts) + '.' : mode === 'real' ? 'Nani envía mensajes privados reales a ' + sentTargetLabel(pickerAccounts) + '.' : 'Un momento…'}</p>
         </div>
       </aside>
       <button type="button" className="nav-scrim" aria-label="Cerrar menú" tabIndex={-1} onClick={() => setNavOpen(false)} />
       <main className="page" inert={navOpen || undefined}>
         <header className="topbar">
           <button type="button" ref={menuButtonRef} className="btn-icon ghost menu-button" aria-label="Abrir menú" aria-controls="app-sidebar" aria-expanded={navOpen} onClick={() => setNavOpen(true)}><Menu size={18} /></button>
-          <div className="topbar-title"><h1>{current[1]}</h1><p className="topbar-sub">{current[2]}</p></div>
+          <div className="topbar-title"><h1>{current[1]}</h1><p className="topbar-sub">{current[0] === 'connections' ? connectionsSubtitle(pickerAccounts) : current[2]}</p></div>
           <div className="topbar-actions" ref={setTopbarSlot} />
         </header>
         <div className={`mode-banner ${mode}`}>
@@ -295,10 +303,11 @@ export default function HomePage() {
           {section === 'connections' && <ConnectionsView connections={connections} accounts={accounts} candidates={candidates} setCandidates={setCandidates} api={api} act={act} confirm={confirm} features={features} />}
           {section === 'media' && <MediaView accounts={accounts} allAccounts={allAccounts} onSelectAccount={chooseAccount} media={media} selected={accountFilter} onNavigate={setSection} api={api} act={act} />}
           {section === 'automations' && <AutomationView accounts={accounts} media={media} rows={automations} selected={accountFilter} api={api} act={act} confirm={confirm} />}
-          {section === 'moderation' && <ModerationView onCelebrate={celebrate} flagCounts={dashboard?.moderation} accountFilter={accountFilter} allAccounts={allAccounts} onSelectAccount={chooseAccount} onNavigate={setSection} api={api} act={act} confirm={confirm} mode={mode} />}
+          {section === 'moderation' && selectedAccount && platformOf(selectedAccount) === 'facebook' && <Empty nani="awake" title={FACEBOOK_MODERATION_UNAVAILABLE.title} detail={FACEBOOK_MODERATION_UNAVAILABLE.detail} action={() => setSection('automations')} actionLabel="Ir a Automatizaciones" />}
+          {section === 'moderation' && !(selectedAccount && platformOf(selectedAccount) === 'facebook') && <ModerationView onCelebrate={celebrate} flagCounts={dashboard?.moderation} accountFilter={accountFilter} allAccounts={allAccounts} onSelectAccount={chooseAccount} onNavigate={setSection} api={api} act={act} confirm={confirm} mode={mode} />}
           {section === 'monitor' && <MonitorView accounts={accounts} status={dashboard?.monitoringEnabled ?? false} onNavigate={setSection} api={api} act={act} />}
           {section === 'backlog' && <BacklogView allAccounts={allAccounts} accounts={accounts} onSelectAccount={chooseAccount} selected={accountFilter} job={scanJob} setJob={setScanJob} rows={automations} api={api} act={act} confirm={confirm} />}
-          {section === 'queue' && <QueueView items={queue} total={queueTotal} offset={queueOffset} setOffset={setQueueOffset} state={queueState} setState={(value) => { setQueueOffset(0); setQueueState(value); }} onNavigate={setSection} api={api} act={act} />}
+          {section === 'queue' && <QueueView accounts={pickerAccounts} items={queue} total={queueTotal} offset={queueOffset} setOffset={setQueueOffset} state={queueState} setState={(value) => { setQueueOffset(0); setQueueState(value); }} onNavigate={setSection} api={api} act={act} />}
           {section === 'settings' && <SettingsView mode={mode} act={act} api={api} confirm={confirm} features={features} />}
         </div>
         {section !== 'moderation' && <footer className="footer-note"><span><span className="status-dot" aria-hidden="true" /> Solo en este equipo · Datos y credenciales permanecen en el servidor local.</span><button className="btn-link" onClick={() => void refresh()}>Actualizar</button></footer>}
@@ -444,7 +453,7 @@ function DashboardView({ data, accounts, connections, automations, queue, mode, 
         return <article className={problem ? 'account-card problem' : 'account-card'} key={account.accountId}>
           <Nani state={state} size={40} />
           <div className="account-card-text">
-            <strong>@{account.username}</strong>
+            <strong>{accountHandle(account)}</strong>
             <span className="muted">{account.last_sync ? <>Sincronizada <span className="mono nowrap">{formatDate(account.last_sync)}</span></> : 'Sin sincronización'}{coverageLabel(account.coverage) ? ` · ${coverageLabel(account.coverage)}` : ''}</span>
             {account.last_error && <span className="account-error"><AlertTriangle size={13} aria-hidden="true" /> {accountErrorLabel(account.last_error)}</span>}
           </div>
@@ -465,15 +474,15 @@ function DashboardView({ data, accounts, connections, automations, queue, mode, 
 
 function focusById(id: string) { const node = document.getElementById(id); node?.scrollIntoView?.({ block: 'center' }); node?.focus(); }
 
-function ConnectionsView({ connections, accounts, candidates, setCandidates, api, act, confirm, features }: { connections: Connection[]; accounts: Account[]; candidates: Array<{ connectionId: string; providerAccountId: string; username: string }>; setCandidates(value: Array<{ connectionId: string; providerAccountId: string; username: string }>): void; api: Api; act: Act; confirm: Confirm; features: Features }) {
+function ConnectionsView({ connections, accounts, candidates, setCandidates, api, act, confirm, features }: { connections: Connection[]; accounts: Account[]; candidates: Array<Candidate>; setCandidates(value: Array<Candidate>): void; api: Api; act: Act; confirm: Confirm; features: Features }) {
   const legacyAccounts = legacyPanelAccounts(features, accounts);
   const [name, setName] = useState(''); const [loginKind, setLoginKind] = useState('instagram_login'); const [appId, setAppId] = useState(''); const [version, setVersion] = useState('v26.0'); const [token, setToken] = useState('');
   const [editing, setEditing] = useState<Connection | null>(null); const [editName, setEditName] = useState(''); const [editAppId, setEditAppId] = useState(''); const [editVersion, setEditVersion] = useState(''); const [editToken, setEditToken] = useState('');
   async function create(event: FormEvent) { event.preventDefault(); const submittedToken = token; setToken(''); await act(async () => { await api('/api/connections', 'POST', { id: crypto.randomUUID(), name, loginKind, appId, graphVersion: version, accessToken: submittedToken }); setName(''); }, 'Conexión guardada; valide para descubrir cuentas.'); }
   async function discover(id: string) { await act(async () => { await api(`/api/connections/${id}/test`, 'POST', {}); const result = await api(`/api/connections/${id}/discover`, 'POST', {}); setCandidates(result.candidates.map((candidate: any) => ({ ...candidate, connectionId: id }))); }, 'Validación y descubrimiento completados.'); }
   async function update(event: FormEvent) { event.preventDefault(); if (!editing) return; const submittedToken = editToken; setEditToken(''); await act(async () => { await api(`/api/connections/${editing.id}`, 'PUT', { name: editName, appId: editAppId || null, graphVersion: editVersion, ...(submittedToken ? { accessToken: submittedToken } : {}) }); setEditing(null); }, 'Conexión actualizada. Vuelva a validar antes de monitorear.'); }
-  const [pendingAdopt, setPendingAdopt] = useState<{ connectionId: string; providerAccountId: string; username: string } | null>(null);
-  async function selectCandidate(candidate: { connectionId: string; providerAccountId: string; username: string }, confirmed: boolean) {
+  const [pendingAdopt, setPendingAdopt] = useState<Candidate | null>(null);
+  async function selectCandidate(candidate: Candidate, confirmed: boolean) {
     await act(async () => {
       try {
         await api(`/api/connections/${candidate.connectionId}/select`, 'POST', { account: candidate, ...(confirmed ? { confirmed: true } : {}) });
@@ -515,17 +524,19 @@ function ConnectionsView({ connections, accounts, candidates, setCandidates, api
           </span></div>
       </article>)}</div>}
     </section>
+    <TutorialSection api={api} confirm={confirm} />
     <div className="conn-columns">
       <div className="conn-forms">
         {editing && <form className="panel form-panel" onSubmit={(event) => void update(event)}><div className="panel-heading"><div><h3>Editar conexión</h3><p className="muted">Deje el token vacío para conservarlo. Si cambia, se invalida la validación anterior.</p></div></div><div className="form-grid"><Field label="Nombre"><input required value={editName} onChange={(event) => setEditName(event.target.value)} /></Field><Field label="App ID"><input value={editAppId} onChange={(event) => setEditAppId(event.target.value)} /></Field><Field label="Versión Graph"><input required pattern="v[0-9]+\.[0-9]+" value={editVersion} onChange={(event) => setEditVersion(event.target.value)} /></Field><Field label="Nuevo token · captura opcional"><input type="password" autoComplete="new-password" value={editToken} onChange={(event) => setEditToken(event.target.value)} /></Field></div><div className="row-actions"><button className="btn-main">Guardar cambios</button><button type="button" className="btn" onClick={() => { setEditToken(''); setEditing(null); }}>Cancelar</button></div></form>}
         <form className="panel form-panel" onSubmit={(event) => void create(event)}><div className="panel-heading"><div><h3>Nueva conexión</h3><p className="muted">Use un token con acceso autorizado a la cuenta que desea administrar.</p></div></div>
           <div className="form-grid"><Field label="Nombre"><input id="conn-name" required value={name} onChange={(event) => setName(event.target.value)} placeholder="Cuenta principal" /></Field><Field label="Tipo de acceso"><select value={loginKind} onChange={(event) => setLoginKind(event.target.value)}><option value="instagram_login">Instagram Login · token de Instagram</option><option value="facebook_login">Facebook Login · token de usuario y página vinculada</option></select></Field><Field label="App ID (opcional)"><input value={appId} onChange={(event) => setAppId(event.target.value)} /></Field><Field label="Versión Graph"><input required pattern="v[0-9]+\.[0-9]+" value={version} onChange={(event) => setVersion(event.target.value)} /></Field><Field label="Token de acceso · solo captura"><input required type="password" autoComplete="new-password" value={token} onChange={(event) => setToken(event.target.value)} /></Field></div>
+          {loginKind === 'facebook_login' && <div className="preview-box" role="note" aria-label="Ayuda de Facebook Login">{FACEBOOK_LOGIN_HELP.lines.map((line) => <p className="hint" key={line}>{line}</p>)}<p className="hint">Guía paso a paso: <span className="mono">{FACEBOOK_LOGIN_HELP.guide}</span></p></div>}
           <div><button className="btn-main" type="submit"><Lock size={15} aria-hidden="true" /> Guardar conexión cifrada</button></div>
         </form>
       </div>
       <aside className="conn-side">
-        <section className="panel"><div className="panel-heading"><div><h3>Cuentas seleccionadas</h3><p className="muted">Los ID se obtienen de la respuesta oficial de Meta.</p></div></div>{accounts.length ? <div className="avatar-tiles">{accounts.map((account) => <div className="list-row avatar-tile" key={account.accountId}><RingAvatar username={account.username} /><div className="list-row-text"><strong>@{account.username}</strong><span className="muted">{account.status === 'valid' ? 'Validada' : account.status} · {account.accountId}</span></div></div>)}</div> : <p className="empty-inline">Aún no hay cuentas seleccionadas. Pruebe una conexión y pulse «Seleccionar» en la cuenta que desea usar.</p>}</section>
-        <section className="panel"><h3>Cuentas descubiertas</h3>{candidates.length ? <div className="avatar-tiles">{candidates.map((candidate) => <div className="list-row avatar-tile" key={candidate.providerAccountId}><RingAvatar username={candidate.username}/><div className="list-row-text"><strong>@{candidate.username}</strong><span className="muted">ID de proveedor: {candidate.providerAccountId}</span></div><button className="btn-main small" onClick={() => void selectCandidate(candidate, false)}>Seleccionar</button></div>)}</div> : <p className="empty-inline">Pulse «Probar y descubrir» en una conexión para listar las cuentas disponibles.</p>}{pendingAdopt && <div className="adopt-notice" role="alertdialog" aria-label="Confirmar adopción de cuenta"><p><strong>@{pendingAdopt.username}</strong>: {ADOPTION_PROMPT}</p><div className="row-actions"><button className="btn-main small" onClick={() => void selectCandidate(pendingAdopt, true)}>Adoptar</button><button className="btn small" onClick={() => setPendingAdopt(null)}>Cancelar</button></div></div>}</section>
+        <section className="panel"><div className="panel-heading"><div><h3>Cuentas seleccionadas</h3><p className="muted">Los ID se obtienen de la respuesta oficial de Meta.</p></div></div>{accounts.length ? <div className="avatar-tiles">{accounts.map((account) => <div className="list-row avatar-tile" key={account.accountId}><RingAvatar username={account.username} /><div className="list-row-text"><strong>{accountHandle(account)}</strong><span className="muted">{platformBadge(account, accounts) ? `${platformBadge(account, accounts)} · ` : ''}{account.status === 'valid' ? 'Validada' : account.status} · {account.accountId}</span></div></div>)}</div> : <p className="empty-inline">Aún no hay cuentas seleccionadas. Pruebe una conexión y pulse «Seleccionar» en la cuenta que desea usar.</p>}</section>
+        <section className="panel"><h3>Cuentas descubiertas</h3>{candidates.length ? <div className="avatar-tiles">{candidates.map((candidate) => <div className="list-row avatar-tile" key={candidate.providerAccountId}><RingAvatar username={candidate.username}/><div className="list-row-text"><strong>{accountHandle(candidate)}</strong><span className="muted">{platformBadge(candidate, candidates) ? `${platformBadge(candidate, candidates)} · ` : ''}ID de proveedor: {candidate.providerAccountId}</span></div><button className="btn-main small" onClick={() => void selectCandidate(candidate, false)}>Seleccionar</button></div>)}</div> : <p className="empty-inline">Pulse «Probar y descubrir» en una conexión para listar las cuentas disponibles.</p>}{pendingAdopt && <div className="adopt-notice" role="alertdialog" aria-label="Confirmar adopción de cuenta"><p><strong>{accountHandle(pendingAdopt)}</strong>: {ADOPTION_PROMPT}</p><div className="row-actions"><button className="btn-main small" onClick={() => void selectCandidate(pendingAdopt, true)}>Adoptar</button><button className="btn small" onClick={() => setPendingAdopt(null)}>Cancelar</button></div></div>}</section>
         {legacyAccounts.length > 0 && <section className="panel"><h3>Retención heredada</h3><p className="muted">{features.legacyInterlock ? 'Una cuenta usada antes con otra herramienta puede tener un bloqueo o historial de rechazos previos. La aplicación nunca borra ni modifica esos archivos.' : 'Esta cuenta conserva una retención de una configuración heredada anterior. Revísela y reconózcala para liberarla.'}</p><div className="avatar-tiles">{legacyAccounts.map((account) => <div className="list-row avatar-tile" key={`legacy-${account.accountId}`}><RingAvatar username={account.username} /><div className="list-row-text"><strong>@{account.username}</strong></div><button className="btn small" onClick={() => void acknowledgeLegacy(account)}>Revisar estado y reconocer</button></div>)}</div></section>}
       </aside>
     </div>
@@ -534,6 +545,7 @@ function ConnectionsView({ connections, accounts, candidates, setCandidates, api
 
 function MediaView({ accounts, allAccounts, onSelectAccount, media, selected, onNavigate, api, act }: { accounts: Account[]; allAccounts: Account[]; onSelectAccount(id: string): void; media: Media[]; selected: string; onNavigate(id: string): void; api: Api; act: Act }) {
   const current = selected === 'all' ? '' : selected;
+  const postLabel = viewPostLabel(platformOf((allAccounts.length ? allAccounts : accounts).find((item) => item.accountId === current)));
   const own = media.filter((item) => item.accountId === current);
   const choices = allAccounts.length ? allAccounts : accounts;
   const reload = () => void act(() => api(`/api/connections/${choices.find((item) => item.accountId === current)?.connectionId}/media`, 'POST', { accountId: current }), 'Publicaciones actualizadas.');
@@ -543,7 +555,7 @@ function MediaView({ accounts, allAccounts, onSelectAccount, media, selected, on
     {current ? own.length ? <div className="media-grid stagger">{own.map((item) => { const caption = shortCaption(item.caption, 80); return <article className="media-card" key={item.mediaId}><MediaThumb item={item} />
 <div className="media-card-body">
   <strong className={caption ? 'media-caption' : 'media-caption muted-text'}>{caption ?? `Sin texto · ${shortId(item.mediaId)}`}</strong>
-  <div className="media-meta"><span className="mono">{item.publishedAt ? formatDate(item.publishedAt) : 'Sin fecha'}</span>{item.permalink && <a className="media-link" href={item.permalink} target="_blank" rel="noreferrer"><ExternalLink size={12} aria-hidden="true" /> Ver en Instagram</a>}</div>
+  <div className="media-meta"><span className="mono">{item.publishedAt ? formatDate(item.publishedAt) : 'Sin fecha'}</span>{item.permalink && <a className="media-link" href={item.permalink} target="_blank" rel="noreferrer"><ExternalLink size={12} aria-hidden="true" /> {postLabel}</a>}</div>
 </div></article>; })}</div>
       : <Empty nani="awake" title="Aún no veo tus publicaciones. Descárgalas y las vigilo." detail="Descargue las publicaciones de esta cuenta para poder crear automatizaciones." action={reload} actionLabel="Actualizar publicaciones" primary />
       : choices.length ? <AccountPrompt id="media-account-prompt" title="Elija una cuenta para ver sus publicaciones" detail="Las publicaciones se cargan de una cuenta a la vez." choices={choices} onSelect={onSelectAccount} />
@@ -551,11 +563,11 @@ function MediaView({ accounts, allAccounts, onSelectAccount, media, selected, on
 }
 
 /** "Choose an account" prompt shared by the account-scoped screens. */
-function AccountPrompt({ id, title, detail, choices, onSelect }: { id: string; title: string; detail: string; choices: Array<{ accountId: string; username: string }>; onSelect(id: string): void }) {
+function AccountPrompt({ id, title, detail, choices, onSelect }: { id: string; title: string; detail: string; choices: Array<{ accountId: string; username: string; platform?: string }>; onSelect(id: string): void }) {
   return <div className="account-prompt" role="group" aria-labelledby={id}>
     <span className="empty-icon" aria-hidden="true"><Users size={20} /></span>
     <strong id={id}>{title}</strong><p className="muted">{detail}</p>
-    <div className="account-prompt-chips">{choices.map((account) => <button key={account.accountId} className="account-chip" onClick={() => onSelect(account.accountId)}><RingAvatar username={account.username} /> @{account.username}</button>)}</div>
+    <div className="account-prompt-chips">{choices.map((account) => <button key={account.accountId} className="account-chip" onClick={() => onSelect(account.accountId)}><RingAvatar username={account.username} /> {accountHandle(account)}</button>)}</div>
   </div>;
 }
 
@@ -566,7 +578,7 @@ function AutomationView({ accounts, media, rows, selected, api, act, confirm }: 
   const [editing, setEditing] = useState<Automation | null>(null);
   useEffect(() => { if (selected !== 'all') { setAccountId(selected); setMediaId(''); } }, [selected]);
   const ownMedia = media.filter((item) => item.accountId === accountId);
-  async function create(event: FormEvent) { event.preventDefault(); const buttons = [{ title: buttonTitle, url: buttonUrl }, { title: buttonTitle2, url: buttonUrl2 }].filter((button) => button.title.trim() || button.url.trim()); await act(() => api('/api/automations', 'POST', { accountId, ...automationTargetPayload(mediaId), name, keywords: keywords.split(',').map((item) => item.trim()).filter(Boolean), replyText, matchMode: mode, buttons, publicReplyEnabled: publicEnabled, publicReplyVariants: parseVariantLines(publicVariants) }), 'Automatización guardada en modo de prueba.'); }
+  async function create(event: FormEvent) { event.preventDefault(); const buttons = [{ title: buttonTitle, url: buttonUrl }, { title: buttonTitle2, url: buttonUrl2 }].filter((button) => button.title.trim() || button.url.trim()); await act(() => api('/api/automations', 'POST', { accountId, ...automationTargetPayload(mediaId), name, keywords: keywords.split(',').map((item) => item.trim()).filter(Boolean), replyText, matchMode: mode, buttons, publicReplyEnabled: publicEnabled && !isFacebook, publicReplyVariants: isFacebook ? [] : parseVariantLines(publicVariants) }), 'Automatización guardada en modo de prueba.'); }
   async function toggleReal(row: Automation) {
     if (!row.realEnabled && !(await confirm({ title: `Autorizar respuestas reales en «${row.name}»`, body: 'Esta automatización podrá enviar mensajes privados reales cuando el Dry Run global esté desactivado. El Dry Run global sigue siendo un control independiente.', confirmLabel: 'Autorizar modo real', danger: true }))) return;
     await act(() => api(`/api/automations/${row.automationId}/real`, 'PATCH', { accountId: row.accountId, enabled: !row.realEnabled, confirmed: true }), row.realEnabled ? 'Respuestas reales desactivadas.' : 'Automatización autorizada para modo real.');
@@ -575,12 +587,14 @@ function AutomationView({ accounts, media, rows, selected, api, act, confirm }: 
     if (!(await confirm({ title: `Archivar «${row.name}»`, body: 'Archivar detiene esta automatización y conserva el historial. No podrá reactivarla desde esta pantalla.', confirmLabel: 'Archivar', danger: true }))) return;
     await act(() => api(`/api/automations/${row.automationId}/delete`, 'POST', { accountId: row.accountId }), 'Automatización archivada.');
   }
-  const previewUser = accounts.find((item) => item.accountId === accountId)?.username;
+  const previewAccount = accounts.find((item) => item.accountId === accountId);
+  const previewUser = previewAccount?.username;
+  const isFacebook = platformOf(previewAccount) === 'facebook';
   return <div className="auto-page">
     <PageActions><button className="button primary" aria-label="Nueva automatización" onClick={() => focusById('auto-account')}><Plus size={15} aria-hidden="true" /> <span className="btn-label">Nueva automatización</span></button></PageActions>
     <section aria-labelledby="auto-list-title">
       <div className="section-h"><h3 id="auto-list-title">Tus automatizaciones</h3><p className="muted">Cada regla responde por mensaje privado cuando un comentario contiene sus palabras clave.</p></div>
-      {rows.length ? <div className="recipe-grid stagger">{rows.map((row) => { const owner = accounts.find((item) => item.accountId === row.accountId)?.username; return <article className="automation-row tile" key={row.automationId}>
+      {rows.length ? <div className="recipe-grid stagger">{rows.map((row) => { const owner = accounts.find((item) => item.accountId === row.accountId); return <article className="automation-row tile" key={row.automationId}>
         <div className="recipe-flow">
           {row.scope === 'account' ? <span className="recipe-thumb ph"><Layers size={18} aria-hidden="true" /></span> : <MiniThumb size="recipe" item={media.find(m => m.mediaId === row.mediaId)} />}
           <ArrowRight size={16} className="recipe-arrow" aria-hidden="true" />
@@ -590,7 +604,7 @@ function AutomationView({ accounts, media, rows, selected, api, act, confirm }: 
             <div className="keyword-list">{row.keywords.length ? row.keywords.map((keyword) => <span className="kw-chip" key={keyword.phrase}>{keyword.phrase}</span>) : <span className="muted">Sin palabras clave</span>}</div>
           </div>
         </div>
-        <div className="recipe-scope muted"><RingAvatar username={owner} size="sm" /> <span className="recipe-scope-text">@{owner || 'Cuenta'} · {automationTargetLabel(row, media)}</span></div>
+        <div className="recipe-scope muted"><RingAvatar username={owner?.username} size="sm" /> <span className="recipe-scope-text">{owner ? accountHandle(owner) : '@Cuenta'} · {automationTargetLabel(row, media)}</span></div>
         <div className="chip-row">
           {row.scope === 'account' && <Status value="General" tone="neutral" />}
           <Status value={row.status === 'enabled' ? 'Activa' : 'Pausada'} tone={row.status === 'enabled' ? 'good' : 'neutral'} />
@@ -607,17 +621,17 @@ function AutomationView({ accounts, media, rows, selected, api, act, confirm }: 
         </div>
       </article>; })}</div> : <Empty nani="awake" title="Aún no sé qué responder. Enséñame con una automatización." detail="Cree una automatización asociada a una de sus publicaciones. Empieza en modo prueba." action={() => focusById('auto-account')} actionLabel="Crear la primera automatización" primary />}
     </section>
-    {editing && <AutomationEditDialog row={editing} mediaOptions={media.filter((item) => item.accountId === editing.accountId).map((item) => ({ id: item.mediaId, label: mediaLabel(item) }))} onClose={() => setEditing(null)} onSave={async (values) => {
+    {editing && <AutomationEditDialog row={editing} platform={platformOf(accounts.find((item) => item.accountId === editing.accountId))} mediaOptions={media.filter((item) => item.accountId === editing.accountId).map((item) => ({ id: item.mediaId, label: mediaLabel(item) }))} onClose={() => setEditing(null)} onSave={async (values) => {
       const saved = await act(() => api(`/api/automations/${editing.automationId}`, 'PUT', { accountId: editing.accountId, mediaId: editing.scope === 'account' ? null : values.mediaId, name: values.name, replyText: values.replyText, matchMode: values.matchMode, buttons: editing.buttons ?? [], keywords: values.keywords.split(',').map((keyword) => keyword.trim()).filter(Boolean), publicReplyEnabled: values.publicReplyEnabled, publicReplyVariants: parseVariantLines(values.publicReplyVariants) }), 'Automatización actualizada; se invalidaron elementos con plantilla anterior.');
       if (saved) setEditing(null);
     }} />}
     <div className="composer">
       <form className="panel form-panel composer-form" onSubmit={(event) => void create(event)}><div className="panel-heading"><div><h3>Nueva automatización</h3><p className="muted">Seleccione primero la cuenta; las publicaciones pertenecen a esa cuenta.</p></div></div>
-        <div className="seq-header"><span className="seq-num">1</span> Dónde responder</div><div className="form-grid"><Field label="Cuenta"><select id="auto-account" required value={accountId} onChange={(event) => { setAccountId(event.target.value); setMediaId(''); }}><option value="">Seleccione una cuenta</option>{accounts.map((account) => <option key={account.accountId} value={account.accountId}>@{account.username}</option>)}</select></Field><Field label="Publicación"><select required disabled={!accountId} value={mediaId} onChange={(event) => setMediaId(event.target.value)}><option value="">Seleccione una publicación</option><option value={GENERAL_MEDIA_OPTION}>Todas las publicaciones (general)</option>{ownMedia.map((item) => <option key={item.mediaId} value={item.mediaId}>{mediaLabel(item)}</option>)}</select>{mediaId === GENERAL_MEDIA_OPTION && <small className="hint">Se aplica a cualquier publicación de la cuenta que no tenga su propia automatización; solo comentarios posteriores a la activación.</small>}</Field><Field label="Nombre"><input required value={name} onChange={(event) => setName(event.target.value)} /></Field></div>
+        <div className="seq-header"><span className="seq-num">1</span> Dónde responder</div><div className="form-grid"><Field label="Cuenta"><select id="auto-account" required value={accountId} onChange={(event) => { setAccountId(event.target.value); setMediaId(''); }}><option value="">Seleccione una cuenta</option>{accounts.map((account) => <option key={account.accountId} value={account.accountId}>{accountHandle(account)}{platformBadge(account, accounts) ? ` · ${platformBadge(account, accounts)}` : ''}</option>)}</select></Field><Field label="Publicación"><select required disabled={!accountId} value={mediaId} onChange={(event) => setMediaId(event.target.value)}><option value="">Seleccione una publicación</option><option value={GENERAL_MEDIA_OPTION}>Todas las publicaciones (general)</option>{ownMedia.map((item) => <option key={item.mediaId} value={item.mediaId}>{mediaLabel(item)}</option>)}</select>{mediaId === GENERAL_MEDIA_OPTION && <small className="hint">Se aplica a cualquier publicación de la cuenta que no tenga su propia automatización; solo comentarios posteriores a la activación.</small>}</Field><Field label="Nombre"><input required value={name} onChange={(event) => setName(event.target.value)} /></Field></div>
         <div className="seq-header"><span className="seq-num">2</span> Cuándo</div><div className="form-grid"><Field label="Palabras clave · separadas por coma"><input required value={keywords} onChange={(event) => setKeywords(event.target.value)} placeholder="guia, ebook" /></Field><Field label="Coincidencia"><select value={mode} onChange={(event) => setMode(event.target.value)}><option value="contains">Frase dentro del comentario</option><option value="exact">Comentario exacto</option></select></Field></div>
         <div className="seq-header"><span className="seq-num">3</span> Qué responde</div><div className="form-grid full-width"><Field label="Respuesta · variables {{username}}, {{comment}}, {{keyword}}"><textarea required rows={4} value={replyText} onChange={(event) => setReplyText(event.target.value)} /></Field></div>
-        <div className="seq-header"><span className="seq-num">4</span> Botones (opcional)</div><div className="form-grid"><Field label="Botón URL opcional · título"><input maxLength={20} value={buttonTitle} onChange={(event) => setButtonTitle(event.target.value)} placeholder="Ver recurso" /></Field><Field label="URL HTTPS"><input type="url" value={buttonUrl} onChange={(event) => setButtonUrl(event.target.value)} placeholder="https://…" /></Field><Field label="Segundo botón · título opcional"><input maxLength={20} value={buttonTitle2} onChange={(event) => setButtonTitle2(event.target.value)} /></Field><Field label="Segundo botón · URL HTTPS"><input type="url" value={buttonUrl2} onChange={(event) => setButtonUrl2(event.target.value)} /></Field></div><p className="hint">{MEDIA_LINK_TIP}</p>
-        <div className="seq-header"><span className="seq-num">5</span> Respuesta pública (opcional)</div><PublicReplyFields idPrefix="new" enabled={publicEnabled} setEnabled={setPublicEnabled} text={publicVariants} setText={setPublicVariants} /><p className="hint">Puede añadir cero, uno o dos botones URL en esta pantalla. Las palabras clave son sinónimos: si varias aparecen en un mismo comentario, se procesa una sola coincidencia.</p>
+        <div className="seq-header"><span className="seq-num">4</span> Botones (opcional)</div><div className="form-grid"><Field label="Botón URL opcional · título"><input maxLength={20} value={buttonTitle} onChange={(event) => setButtonTitle(event.target.value)} placeholder="Ver recurso" /></Field><Field label="URL HTTPS"><input type="url" value={buttonUrl} onChange={(event) => setButtonUrl(event.target.value)} placeholder="https://…" /></Field><Field label="Segundo botón · título opcional"><input maxLength={20} value={buttonTitle2} onChange={(event) => setButtonTitle2(event.target.value)} /></Field><Field label="Segundo botón · URL HTTPS"><input type="url" value={buttonUrl2} onChange={(event) => setButtonUrl2(event.target.value)} /></Field></div><p className="hint">{MEDIA_LINK_TIP}</p>{isFacebook && <p className="hint">{FACEBOOK_BUTTONS_NOTE}</p>}
+        <div className="seq-header"><span className="seq-num">5</span> Respuesta pública (opcional)</div><PublicReplyFields idPrefix="new" enabled={publicEnabled && !isFacebook} setEnabled={setPublicEnabled} text={publicVariants} setText={setPublicVariants} unavailable={isFacebook} /><p className="hint">Puede añadir cero, uno o dos botones URL en esta pantalla. Las palabras clave son sinónimos: si varias aparecen en un mismo comentario, se procesa una sola coincidencia.</p>
         <div><button className="btn-main" disabled={!accountId || !mediaId}>Guardar automatización</button></div></form>
       <aside className="composer-preview" aria-label="Vista previa del mensaje privado">
         <div className="phone">
@@ -626,11 +640,12 @@ function AutomationView({ accounts, media, rows, selected, api, act, confirm }: 
               <RingAvatar username={previewUser} />
               <div>
                 <b>Vista previa</b>
-                <small>@{previewUser ?? 'cuenta'}</small>
+                <small>{isFacebook && previewAccount ? accountHandle(previewAccount) : `@${previewUser ?? 'cuenta'}`}</small>
               </div>
             </div>
             <div className="chat">
               <div className="context">Simulación de respuesta privada</div>
+              {isFacebook && <div className="context">{FACEBOOK_USERNAME_FALLBACK_NOTE}</div>}
               {replyText ? (
                 <div className="bubble">
                   {replyText.replace(/{{username}}/g, 'ana').replace(/{{keyword}}/g, keywords.split(',')[0]?.trim() || 'palabra')}
@@ -648,7 +663,7 @@ function AutomationView({ accounts, media, rows, selected, api, act, confirm }: 
   </div>;
 }
 
-function AutomationEditDialog({ row, mediaOptions, onSave, onClose }: { row: Automation; mediaOptions: Array<{ id: string; label: string }>; onSave(values: { name: string; mediaId: string; keywords: string; replyText: string; matchMode: 'exact' | 'contains'; publicReplyEnabled: boolean; publicReplyVariants: string }): Promise<void>; onClose(): void }) {
+function AutomationEditDialog({ row, platform, mediaOptions, onSave, onClose }: { row: Automation; platform: 'instagram' | 'facebook'; mediaOptions: Array<{ id: string; label: string }>; onSave(values: { name: string; mediaId: string; keywords: string; replyText: string; matchMode: 'exact' | 'contains'; publicReplyEnabled: boolean; publicReplyVariants: string }): Promise<void>; onClose(): void }) {
   const [name, setName] = useState(row.name); const [mediaId, setMediaId] = useState(row.mediaId ?? ''); const isGeneral = row.scope === 'account';
   const [keywords, setKeywords] = useState(row.keywords.map((item) => item.phrase).join(', '));
   const [replyText, setReplyText] = useState(row.replyText ?? 'Hola {{username}}'); const [matchMode, setMatchMode] = useState<string>(row.matchMode ?? 'contains');
@@ -657,9 +672,9 @@ function AutomationEditDialog({ row, mediaOptions, onSave, onClose }: { row: Aut
   async function submit(event: FormEvent) {
     event.preventDefault();
     if (matchMode !== 'exact' && matchMode !== 'contains') { setProblem('Modo inválido: elija coincidencia exacta o frase dentro del comentario.'); return; }
-    if (publicEnabled && parseVariantLines(publicVariants).length === 0) { setProblem('Añada al menos una variante para la respuesta pública o desactívela.'); return; }
+    if (platform === 'instagram' && publicEnabled && parseVariantLines(publicVariants).length === 0) { setProblem('Añada al menos una variante para la respuesta pública o desactívela.'); return; }
     setProblem(''); setBusy(true);
-    try { await onSave({ name: name.trim(), mediaId: mediaId.trim(), keywords, replyText, matchMode, publicReplyEnabled: publicEnabled, publicReplyVariants: publicVariants }); } finally { setBusy(false); }
+    try { await onSave({ name: name.trim(), mediaId: mediaId.trim(), keywords, replyText, matchMode, publicReplyEnabled: platform === 'instagram' && publicEnabled, publicReplyVariants: platform === 'instagram' ? publicVariants : '' }); } finally { setBusy(false); }
   }
   return <Modal titleId="edit-auto-title" descriptionId="edit-auto-desc" onClose={onClose} wide>
     <form onSubmit={(event) => void submit(event)} className="modal-form">
@@ -673,7 +688,7 @@ function AutomationEditDialog({ row, mediaOptions, onSave, onClose }: { row: Aut
         <Field label="Coincidencia"><select value={matchMode} onChange={(event) => setMatchMode(event.target.value)}><option value="contains">Frase dentro del comentario (contains)</option><option value="exact">Comentario exacto (exact)</option></select></Field>
         <Field label="Plantilla de respuesta · variables {{username}}, {{comment}}, {{keyword}}"><textarea required rows={4} value={replyText} onChange={(event) => setReplyText(event.target.value)} /></Field>
       </div>
-      <PublicReplyFields idPrefix="edit" enabled={publicEnabled} setEnabled={setPublicEnabled} text={publicVariants} setText={setPublicVariants} />
+      <PublicReplyFields idPrefix="edit" enabled={publicEnabled && platform === 'instagram'} setEnabled={setPublicEnabled} text={publicVariants} setText={setPublicVariants} unavailable={platform === 'facebook'} />
       <datalist id="edit-media-options">{mediaOptions.map((option) => <option key={option.id} value={option.id} label={option.label} />)}</datalist>
       {problem && <p className="form-problem" role="alert">{problem}</p>}
       <div className="modal-actions"><button type="button" className="btn" onClick={onClose}>Cancelar</button><button type="submit" className="btn-main" disabled={busy}>{busy ? 'Guardando…' : 'Guardar cambios'}</button></div>
@@ -682,17 +697,17 @@ function AutomationEditDialog({ row, mediaOptions, onSave, onClose }: { row: Aut
 }
 
 /** Optional public reply: checkbox, one variant per line, live count, two random rendered examples and the ordering guarantee. */
-function PublicReplyFields({ idPrefix, enabled, setEnabled, text, setText }: { idPrefix: string; enabled: boolean; setEnabled(value: boolean): void; text: string; setText(value: string): void }) {
+function PublicReplyFields({ idPrefix, enabled, setEnabled, text, setText, unavailable = false }: { idPrefix: string; enabled: boolean; setEnabled(value: boolean): void; text: string; setText(value: string): void; unavailable?: boolean }) {
   const variants = useMemo(() => parseVariantLines(text), [text]);
   const [seed, setSeed] = useState(0);
   // `seed` re-rolls the two random examples on "Otros ejemplos".
   const examples = useMemo(() => (seed >= 0 ? previewExamples(variants) : []), [variants, seed]);
   return <fieldset className="public-reply-fields">
     <label className="toggle-row" htmlFor={`${idPrefix}-public-enabled`}>
-  <input id={`${idPrefix}-public-enabled`} type="checkbox" checked={enabled} onChange={(event) => setEnabled(event.target.checked)} />
+  <input id={`${idPrefix}-public-enabled`} type="checkbox" checked={enabled} disabled={unavailable} aria-describedby={unavailable ? `${idPrefix}-public-unavailable` : undefined} onChange={(event) => setEnabled(event.target.checked)} />
   <div className="toggle-row-text">
     <strong>Responder también públicamente al comentario</strong>
-    <span>Enviará un comentario de respuesta visible en la publicación.</span>
+    <span id={`${idPrefix}-public-unavailable`}>{unavailable ? FACEBOOK_PUBLIC_REPLY_UNAVAILABLE : 'Enviará un comentario de respuesta visible en la publicación.'}</span>
   </div>
 </label>
     {enabled && <>
@@ -742,7 +757,7 @@ function MonitorView({ accounts, status, onNavigate, api, act }: { accounts: Acc
       <Status value={status ? 'Activo' : 'Detenido'} tone={status ? 'good' : 'neutral'} />
     </div>
     {accounts.length ? <div className="tile-grid stagger">{accounts.map((account) => <article className={account.monitoringPaused ? 'tile monitor-tile' : 'tile monitor-tile live'} key={account.accountId}>
-      <div className="tile-head"><RingAvatar username={account.username} /><div className="tile-title"><strong>@{account.username}</strong><span className="muted">{account.last_sync ? <>Última sincronización <span className="mono nowrap">{formatDate(account.last_sync)}</span></> : 'Sin sincronización'}</span></div></div>
+      <div className="tile-head"><RingAvatar username={account.username} /><div className="tile-title"><strong>{accountHandle(account)}</strong><span className="muted">{account.last_sync ? <>Última sincronización <span className="mono nowrap">{formatDate(account.last_sync)}</span></> : 'Sin sincronización'}</span></div></div>
       <div className="monitor-state"><Nani state={status && !account.monitoringPaused ? 'awake' : 'sleep'} size={56} /><span className="monitor-state-text">{account.monitoringPaused ? 'Pausado' : 'En monitoreo'}</span></div>
       <div className="tile-actions"><button className="btn small" onClick={() => void act(() => api(`/api/monitor/${account.accountId}`, 'POST', { action: account.monitoringPaused ? 'start' : 'stop' }), account.monitoringPaused ? 'Cuenta en monitoreo.' : 'Monitoreo pausado.')}>{account.monitoringPaused ? <><Play size={14}/> Reanudar</> : <><Pause size={14}/> Detener</>}</button></div>
     </article>)}</div> : <Empty nani="sleep" title="No tengo cuentas que vigilar todavía." detail="Valide y seleccione una cuenta antes de iniciar el monitoreo." action={() => onNavigate('connections')} actionLabel="Ir a Conexiones" primary />}
@@ -841,7 +856,8 @@ function ScanSummaryCard({ status, summary }: { status: string; summary: ReturnT
   </section>;
 }
 
-function QueueView({ items, total, offset, setOffset, state, setState, onNavigate, api, act }: {
+function QueueView({ accounts, items, total, offset, setOffset, state, setState, onNavigate, api, act }: {
+  accounts: Account[];
   items: QueueItem[];
   total: number;
   offset: number;
@@ -914,17 +930,17 @@ function QueueView({ items, total, offset, setOffset, state, setState, onNavigat
       <div className="table-wrap"><table className="dense-table queue-table">
         <thead><tr><th>Cuenta</th><th>Autor</th><th>Comentario</th><th>Estado</th><th>Intentos</th><th>ID de mensaje</th><th>Código seguro</th><th>Fecha</th><th>Historial</th></tr></thead>
         <tbody>{items.map((item) => <tr key={item.id} className={expanded === item.id ? 'expanded' : undefined}>
-          <td><div className="cell-user"><RingAvatar username={item.username} size="sm" /> @{item.username}</div></td>
+          <td><div className="cell-user"><RingAvatar username={item.username} size="sm" /> {accountHandle({ username: item.username, platform: accounts.find((account) => account.accountId === item.accountId)?.platform })}</div></td>
 <td><div className="cell-user"><RingAvatar username={item.commentUsername} size="sm" /> {item.commentUsername ? `@${item.commentUsername}` : '—'}</div></td>
-<td className="comment-cell" title={item.commentText || item.commentId}>{item.commentText || item.commentId}</td><td><Status value={stateLabel(item.state)} tone={queueTone(item.state)} />{item.state === 'UNKNOWN_OUTCOME' && <small className="state-hint">Revise manualmente en Instagram; nunca se reintenta.</small>}</td>
+<td className="comment-cell" title={item.commentText || item.commentId}>{item.commentText || item.commentId}</td><td><Status value={stateLabel(item.state)} tone={queueTone(item.state)} />{item.state === 'UNKNOWN_OUTCOME' && <small className="state-hint">Revise manualmente en {platformOf(accounts.find((account) => account.accountId === item.accountId)) === 'facebook' ? 'Facebook' : 'Instagram'}; nunca se reintenta.</small>}</td>
           <td className="mono">{item.attemptCount}</td><td className="mono id-cell">{item.messageId ?? '—'}</td><td className="mono id-cell">{item.safeErrorCode ?? '—'}</td>
           <td className="mono nowrap">{formatDate(item.createdAt)}</td><td><button className="btn-link text-button" onClick={() => void showAttempts(item)}>{expanded === item.id ? 'Ocultar' : 'Ver'}</button></td>
         </tr>).flatMap((row, index) => {
           const item = items[index]!;
-          return expanded === item.id ? [row, <tr key={`${item.id}-events`} className="detail-row"><td colSpan={9}><div className="queue-detail">{(() => { const message = describeQueuePayload(item); return <div className="queue-message"><strong>{message.label}</strong>{message.text ? <p className="preview-box">{message.text}</p> : <p className="muted">Sin texto de mensaje guardado.</p>}{message.buttons.length > 0 && <ul>{message.buttons.map((button) => <li key={button.url}>Botón «{button.title}» → {button.url}</li>)}</ul>}</div>; })()}<FollowGateDetail item={item} events={gateEvents} />{(() => { const reply = describePublicReply(item); if (!reply) return null; return <div className="queue-message public-reply-detail"><strong>{reply.label}</strong>{reply.text ? <p className="preview-box">{reply.text}</p> : <p className="muted">Sin texto guardado.</p>}{reply.hint && <small className="state-hint">{reply.hint}</small>}{item.publicReply?.safeErrorCode && !publicReplyErrorHint(item.publicReply.safeErrorCode) && <small className="muted">Código: {item.publicReply.safeErrorCode}</small>}{reply.canRetry && <div><button className="btn small" onClick={() => void retryPublic(item)}>Reintentar respuesta pública</button></div>}{publicEvents.length > 0 && <div className="attempt-list">{publicEvents.map((event, eventIndex) => <div key={`public-${event.at}-${eventIndex}`}><strong>público · {event.type}</strong><span>{formatDate(event.at)}</span><span>{event.replyId ?? event.safeErrorCode ?? 'Sin detalle adicional'}</span></div>)}</div>}</div>; })()}{item.state === 'SENT' && <div className="readback-check">
+          return expanded === item.id ? [row, <tr key={`${item.id}-events`} className="detail-row"><td colSpan={9}><div className="queue-detail">{(() => { const message = describeQueuePayload(item); return <div className="queue-message"><strong>{message.label}</strong>{message.text ? <p className="preview-box">{message.text}</p> : <p className="muted">Sin texto de mensaje guardado.</p>}{message.buttons.length > 0 && <ul>{message.buttons.map((button) => <li key={button.url}>Botón «{button.title}» → {button.url}</li>)}</ul>}</div>; })()}<FollowGateDetail item={item} events={gateEvents} />{(() => { const reply = describePublicReply(item); if (!reply) return null; return <div className="queue-message public-reply-detail"><strong>{reply.label}</strong>{reply.text ? <p className="preview-box">{reply.text}</p> : <p className="muted">Sin texto guardado.</p>}{reply.hint && <small className="state-hint">{reply.hint}</small>}{item.publicReply?.safeErrorCode && !publicReplyErrorHint(item.publicReply.safeErrorCode) && <small className="muted">Código: {item.publicReply.safeErrorCode}</small>}{reply.canRetry && <div><button className="btn small" onClick={() => void retryPublic(item)}>Reintentar respuesta pública</button></div>}{publicEvents.length > 0 && <div className="attempt-list">{publicEvents.map((event, eventIndex) => <div key={`public-${event.at}-${eventIndex}`}><strong>público · {event.type}</strong><span>{formatDate(event.at)}</span><span>{event.replyId ?? event.safeErrorCode ?? 'Sin detalle adicional'}</span></div>)}</div>}</div>; })()}{item.state === 'SENT' && platformOf(accounts.find((account) => account.accountId === item.accountId)) === 'facebook' && <div className="readback-check"><small className="hint" role="status">{FACEBOOK_READBACK_NOTE}</small></div>}{item.state === 'SENT' && platformOf(accounts.find((account) => account.accountId === item.accountId)) !== 'facebook' && <div className="readback-check">
             <button className="btn" disabled={verifying} onClick={() => void verifyReadback(item)}>{verifying ? 'Verificando…' : 'Verificar lectura'}</button>
             {verifyResult?.itemId === item.id && <span role="status">{verifyResult.text}</span>}
-          </div>}{item.state === 'SENT' && <ConversationInspector key={`inspect-${item.id}`} item={item} api={api} />}<div className="attempt-list">
+          </div>}{item.state === 'SENT' && platformOf(accounts.find((account) => account.accountId === item.accountId)) !== 'facebook' && <ConversationInspector key={`inspect-${item.id}`} item={item} api={api} />}<div className="attempt-list">
             {events.length ? events.map((event, eventIndex) => <div key={`${event.at}-${eventIndex}`}><strong>{event.type}</strong><span>{formatDate(event.at)}</span><span>{event.type === 'readback' ? readbackSummary(event) : (event.messageId ?? event.safeErrorCode ?? 'Sin detalle adicional')}</span></div>) : <span>{item.state === 'SIMULATED' ? 'Sin intentos: simulado, nada se envió.' : 'Sin intentos registrados.'}</span>}
           </div></div></td></tr>] : [row];
         })}</tbody>
@@ -1006,15 +1022,10 @@ function Field({ label, children }: { label: string; children: ReactNode }) { re
 function Metric({ label, value, note }: { label: string; value: number; note: string }) { return <article className="metric-card"><span>{label}</span><strong>{value}</strong><small>{note}</small></article>; }
 const STATE_LABELS: Record<string, string> = { SIMULATED: 'Simulado', QUEUED: 'En cola', SEND_INTENT_RECORDED: 'Intención registrada', SENDING: 'Enviando', SENT: 'Enviado', FAILED_RETRYABLE: 'Falló (reintentable)', FAILED_PERMANENT: 'Falló (definitivo)', UNKNOWN_OUTCOME: 'Resultado desconocido', EXPIRED: 'Expirado', SKIPPED: 'Omitido' };
 function readbackSummary(event: { safeErrorCode?: string; details: Record<string, unknown> }) {
+  if (event.safeErrorCode === FACEBOOK_READBACK_CODE) return FACEBOOK_READBACK_NOTE;
   if (event.details.observed === true) return event.details.observedMatches === true ? 'Lectura confirmada: el mensaje y los botones coinciden' : 'Lectura confirmada; el contenido no coincide por completo';
   return `No se pudo leer: ${event.safeErrorCode ?? 'readback_unavailable'}${readbackHint(event.safeErrorCode)}`;
 }
-const READBACK_HINTS: Record<string, string> = {
-  meta_readback_sender_mismatch: 'El remitente no coincide con la cuenta',
-  meta_readback_id_mismatch: 'El mensaje leído tiene otro ID',
-  meta_readback_no_recipient: 'No se encontró destinatario',
-};
-function readbackHint(code?: string) { const hint = code ? READBACK_HINTS[code] : undefined; return hint ? ` (${hint})` : ''; }
 function stateLabel(state: string) { return STATE_LABELS[state] ?? state; }
 function queueTone(state: string): Tone {
   if (state === 'SENT') return 'good';
@@ -1034,7 +1045,7 @@ function ConnectionBadge({ status }: { status: string }) {
 }
 function Empty({ title, detail, action, actionLabel, primary, icon: Icon = Inbox, nani }: { title: string; detail: string; action?: () => void; actionLabel?: string; primary?: boolean; icon?: any; nani?: NaniState }) { return <div className={nani ? 'empty-state with-nani' : 'empty-state'}>{nani ? <Nani state={nani} size={84} decorative /> : <div className="empty-icon"><Icon size={20} strokeWidth={1.9} aria-hidden="true" /></div>}<strong>{title}</strong><p>{detail}</p>{action && <button className={primary ? 'button primary' : 'button secondary'} onClick={action}>{actionLabel}</button>}</div>; }
 function formatDate(value: string) { const date = new Date(value); return Number.isNaN(date.valueOf()) ? '—' : date.toLocaleString('es-CO', { dateStyle: 'medium', timeStyle: 'short' }); }
-function safeErrorLabel(code: string) { const labels: Record<string, string> = { account_not_found: 'La cuenta indicada no existe.', connection_not_found: 'La conexión indicada no existe.', invalid_request: 'Revise los campos e inténtelo de nuevo.', origin_or_csrf_rejected: 'La solicitud local no superó la protección de origen.', operation_rejected: 'La operación fue rechazada por una condición de seguridad o estado.', account_scan_failed: 'No se pudo completar el análisis para una cuenta.', follow_gate_invalid: 'La opción «Pedir primero que me sigan» no es válida.', follow_gate_message_invalid: 'Revise el «Mensaje previo»: es obligatorio, de hasta 640 caracteres y solo admite las variables indicadas.', follow_gate_button_title_invalid: 'Revise el «Título del botón»: de 1 a 20 caracteres, sin enlaces ni saltos de línea.', account_adoption_required: 'Esta cuenta pertenecía a una conexión eliminada o desconectada; confirme la adopción para conservar su historial.', follow_gate_retired: FOLLOW_GATE_RETIRED_LABEL, interactive_mode_retired: INTERACTIVE_RETIRED_LABEL, ...ATTACHMENT_ERROR_LABELS, ...AI_ERROR_LABELS }; return labels[code] ?? 'Revise el estado de la cuenta y vuelva a intentarlo.'; }
+function safeErrorLabel(code: string) { const labels: Record<string, string> = { account_not_found: 'La cuenta indicada no existe.', connection_not_found: 'La conexión indicada no existe.', invalid_request: 'Revise los campos e inténtelo de nuevo.', origin_or_csrf_rejected: 'La solicitud local no superó la protección de origen.', operation_rejected: 'La operación fue rechazada por una condición de seguridad o estado.', account_scan_failed: 'No se pudo completar el análisis para una cuenta.', follow_gate_invalid: 'La opción «Pedir primero que me sigan» no es válida.', follow_gate_message_invalid: 'Revise el «Mensaje previo»: es obligatorio, de hasta 640 caracteres y solo admite las variables indicadas.', follow_gate_button_title_invalid: 'Revise el «Título del botón»: de 1 a 20 caracteres, sin enlaces ni saltos de línea.', account_adoption_required: 'Esta cuenta pertenecía a una conexión eliminada o desconectada; confirme la adopción para conservar su historial.', follow_gate_retired: FOLLOW_GATE_RETIRED_LABEL, interactive_mode_retired: INTERACTIVE_RETIRED_LABEL, ...ATTACHMENT_ERROR_LABELS, ...PLATFORM_ERROR_LABELS, ...AI_ERROR_LABELS }; return labels[code] ?? 'Revise el estado de la cuenta y vuelva a intentarlo.'; }
 
 export function ModerationView({ onCelebrate, flagCounts, accountFilter, allAccounts, onSelectAccount, onNavigate, api, act, confirm, mode }: { onCelebrate?: () => void; flagCounts?: Dashboard['moderation']; accountFilter: string; allAccounts: any[]; onSelectAccount: (id: string) => void; onNavigate: (id: string) => void; api: any; act: any; confirm: any; mode: string }) {
   const [settings, setSettings] = useState<any>(null);

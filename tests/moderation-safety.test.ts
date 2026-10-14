@@ -444,7 +444,7 @@ test('Docs: README, REFERENCIA-TECNICA and AGENTS describe the moderation rules'
     assert.ok(reference.includes(fragment), fragment);
   }
   const agents = read('../AGENTS.md');
-  assert.match(agents, /esquema v1\.\.v18/);
+  assert.match(agents, /esquema v1\.\.v19/);
   assert.match(agents, /moderation-ai-local/);
   assert.ok(reference.includes('### Modelo local') && reference.includes('/api/moderation/ai-local/download'), 'local model documented');
   assert.match(readme, /Modelo local: gratis y 100 % privado/);
