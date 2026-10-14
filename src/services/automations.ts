@@ -25,7 +25,8 @@ export type ReplyVariables = {
 export type CommentClassification = {
   eligible: boolean;
   reason: 'eligible' | 'own_authored' | 'reply_thread' | 'missing_author' | 'missing_timestamp' | 'invalid_timestamp'
-    | 'future_timestamp' | 'expired' | 'no_keyword_match' | 'owner_replied' | 'multiple_keyword_matches';
+    | 'future_timestamp' | 'expired' | 'no_keyword_match' | 'owner_replied' | 'multiple_keyword_matches'
+    | 'private_reply_unavailable';
   matchedKeywords: string[];
 };
 
@@ -215,6 +216,13 @@ export function renderFollowGatePayload(
     resource: { text: rendered.text, buttons: rendered.buttons } } };
 }
 
+/** 'Hola {{username}}, gracias' -> 'Hola, gracias'; a leading token also drops the punctuation that followed it. */
+function removeEmptyUsername(template: string): string {
+  return template
+    .replace(/(^|\n)[ \t]*\{\{username\}\}[ \t]*[,;:]?[ \t]*/gu, '$1')
+    .replace(/[ \t]*\{\{username\}\}/gu, '');
+}
+
 export function renderReply(
   template: string,
   variables: ReplyVariables,
@@ -224,7 +232,9 @@ export function renderReply(
   if (!template.trim()) throw new TypeError('Reply text is required');
   if (buttons.length > 2) throw new TypeError('At most two buttons are allowed');
 
-  const text = template.replace(/\{\{([^{}]+)\}\}/gu, (_whole, name: string) => {
+  // No value for {{username}} (Facebook people without a role on the app): drop the token and tidy the gap it leaves.
+  const source = variables.username.trim() === '' ? removeEmptyUsername(template) : template;
+  const text = source.replace(/\{\{([^{}]+)\}\}/gu, (_whole, name: string) => {
     if (name !== 'username' && name !== 'comment' && name !== 'keyword' && name !== 'account' && name !== 'media') {
       throw new TypeError('Unsupported reply variable');
     }
@@ -266,6 +276,8 @@ export function classifyComment(
   now = Date.now(),
   mode: 'exact' | 'contains' = 'contains',
   ownerReplied = false,
+  /** Facebook Page id: switches to author-id rules (no username exists for people without a role on the app). */
+  facebookPageId?: string,
 ): CommentClassification {
   const matchedKeywords = matchAutomation(comment.text ?? '', keywords, mode);
   const classify = (reason: CommentClassification['reason'], eligible = false): CommentClassification => ({
@@ -275,10 +287,28 @@ export function classifyComment(
   });
 
   if (comment.parentId) return classify('reply_thread');
+  if (facebookPageId !== undefined) {
+    // Facebook: the author may be unknown (no `from`); only the Page's own id marks an own comment, never a username.
+    if (comment.authorId !== undefined && comment.authorId === facebookPageId) return classify('own_authored');
+    // `can_reply_privately: false` = a private reply already exists (or is impossible): never queue it.
+    if (comment.canReplyPrivately === false) return classify('private_reply_unavailable');
+    return classifyTimeAndKeywords(comment, now, matchedKeywords, ownerReplied, classify);
+  }
   if (!comment.username?.trim()) return classify('missing_author');
   if (normalizeMatchText(comment.username) === normalizeMatchText(ownerUsername)) {
     return classify('own_authored');
   }
+  return classifyTimeAndKeywords(comment, now, matchedKeywords, ownerReplied, classify);
+}
+
+/** Shared tail of the classification (timestamp window, keyword, owner reply) for both platforms. */
+function classifyTimeAndKeywords(
+  comment: ProviderComment,
+  now: number,
+  matchedKeywords: string[],
+  ownerReplied: boolean,
+  classify: (reason: CommentClassification['reason'], eligible?: boolean) => CommentClassification,
+): CommentClassification {
   if (!comment.createdAt) return classify('missing_timestamp');
   const createdAt = Date.parse(comment.createdAt);
   if (!Number.isFinite(createdAt)) return classify('invalid_timestamp');
@@ -311,6 +341,31 @@ export function ownerRepliedParentIds(database: DatabaseSync, accountId: string,
     .all(accountId, mediaId) as Array<{ parent_id: string; username: string | null }>;
   for (const row of rows) if (row.username != null && normalizeMatchText(row.username) === owner) result.add(row.parent_id);
   return result;
+}
+
+/**
+ * Facebook: ids of root comments on one media that have a stored reply authored by the Page itself (matched by the
+ * author id from `from.id`, never by name). A Page reply to a reply also marks that reply's root. Relies only on replies
+ * stored locally by scans of the full stream; a reply made after the last scan is not known.
+ */
+export function facebookOwnerRepliedParentIds(database: DatabaseSync, accountId: string, mediaId: string, pageId: string): Set<string> {
+  const rows = database.prepare(`SELECT r.parent_id AS parent_id, p.parent_id AS grandparent_id
+    FROM comments r LEFT JOIN comments p ON p.account_id=r.account_id AND p.comment_id=r.parent_id
+    WHERE r.account_id=? AND r.media_id=? AND r.parent_id IS NOT NULL AND r.author_igsid=?`)
+    .all(accountId, mediaId, pageId) as Array<{ parent_id: string; grandparent_id: string | null }>;
+  const result = new Set<string>();
+  for (const row of rows) {
+    result.add(row.parent_id);
+    if (row.grandparent_id) result.add(row.grandparent_id);
+  }
+  return result;
+}
+
+/** Facebook: true when a stored reply authored by the Page (by author id) exists for this comment. */
+export function facebookHasOwnerReply(database: DatabaseSync, accountId: string, commentId: string, pageId: string): boolean {
+  const row = database.prepare(`SELECT 1 FROM comments WHERE account_id=? AND parent_id=? AND author_igsid=? LIMIT 1`)
+    .get(accountId, commentId, pageId);
+  return row !== undefined;
 }
 
 export type AutomationScope = 'media' | 'account';

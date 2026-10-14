@@ -28,11 +28,15 @@ import {
   getConnectionCredential,
   getConnectionSummary,
 } from '../../db/repositories.ts';
+import { PlatformFeatureNotSupportedError, PlatformNotSupportedError } from '../../core/errors.ts';
 import { redactSecrets } from '../../security/redact.ts';
 import type { CredentialVault } from '../../security/vault.ts';
 import {
   INTERACTIVE_MAX_BUTTONS, INTERACTIVE_PAYLOAD_PATTERN, INTERACTIVE_TITLE_MAX, looksLikeUrl, normalizeMatchText,
 } from '../../services/automations.ts';
+import {
+  FACEBOOK_PAGE_ACCOUNT_TYPE, PLATFORM_FEATURE_NOT_SUPPORTED_CODE, assertPlatformEnabled, facebookMessageText, facebookPagesAvailable,
+} from '../../services/facebook-pages-rules.ts';
 import { GATE_MAX_DETAIL_CALLS, normalizeTapText } from '../../services/follow-gate-rules.ts';
 import { isAttachmentKind, isPublicHttpsUrl } from '../../services/resource-attachment.ts';
 
@@ -58,7 +62,8 @@ export class MetaProvider implements SocialProvider {
     private readonly database: DatabaseSync,
     private readonly vault: CredentialVault,
     private readonly fetcher: typeof fetch = fetch,
-    private readonly options: { diagnosticSpacingMs?: number } = {},
+    /** `facebookPagesAvailable` carries the SOCIAL_DESK_FACEBOOK_PAGES opt-in (tests may override it). */
+    private readonly options: { diagnosticSpacingMs?: number; facebookPagesAvailable?: boolean } = {},
   ) {}
 
   async validateConnection(connectionId: string): Promise<ConnectionValidation> {
@@ -116,35 +121,52 @@ export class MetaProvider implements SocialProvider {
       for (const page of pages) {
         const relatedPageId = string(page.id);
         const pageToken = string(page.access_token);
-        const linkedAccount = object(page.instagram_business_account);
-        const providerAccountId = string(linkedAccount?.id);
-        if (!relatedPageId || !pageToken || !providerAccountId) continue;
-
-        const details = await this.request(
-          'facebook_login',
-          connection.graphVersion,
-          `/${encodeURIComponent(providerAccountId)}?fields=id,username,account_type`,
-          pageToken,
-        );
-        const username = string(details.username);
-        if (!username) continue;
-
+        if (!relatedPageId || !pageToken) continue;
         const pageTasks = Array.isArray(page.tasks)
           ? page.tasks.filter((task): task is string => typeof task === 'string').sort()
           : [];
-        accounts.set(providerAccountId, {
-          providerAccountId,
-          username,
-          displayName: string(page.name),
-          accountType: string(details.account_type),
-          relatedPageId,
-          capabilities: [
-            'identity_read',
-            'private_reply_unverified',
-            ...pageTasks.map((task) => `page_task:${task}`),
-          ],
-        });
-        pageTokens.set(providerAccountId, pageToken);
+        const linkedAccount = object(page.instagram_business_account);
+        const providerAccountId = string(linkedAccount?.id);
+
+        if (providerAccountId) {
+          const details = await this.request(
+            'facebook_login',
+            connection.graphVersion,
+            `/${encodeURIComponent(providerAccountId)}?fields=id,username,account_type`,
+            pageToken,
+          );
+          const username = string(details.username);
+          if (username) {
+            accounts.set(providerAccountId, {
+              providerAccountId,
+              username,
+              displayName: string(page.name),
+              accountType: string(details.account_type),
+              relatedPageId,
+              capabilities: [
+                'identity_read',
+                'private_reply_unverified',
+                ...pageTasks.map((task) => `page_task:${task}`),
+              ],
+            });
+            pageTokens.set(providerAccountId, pageToken);
+          }
+        }
+
+        // Dormant until tanda 2: the Page itself becomes a candidate (with or without a linked Instagram account).
+        if (facebookPagesAvailable(this.options.facebookPagesAvailable)) {
+          const pageName = string(page.name) ?? relatedPageId;
+          accounts.set(relatedPageId, {
+            providerAccountId: relatedPageId,
+            username: pageName,
+            displayName: pageName,
+            accountType: FACEBOOK_PAGE_ACCOUNT_TYPE,
+            relatedPageId,
+            platform: 'facebook',
+            capabilities: ['identity_read', ...pageTasks.map((task) => `page_task:${task}`)],
+          });
+          pageTokens.set(relatedPageId, pageToken);
+        }
       }
     }
 
@@ -162,7 +184,8 @@ export class MetaProvider implements SocialProvider {
   }
 
   async listMedia(account: AccountRef, cursor?: string): Promise<ProviderPage<MediaItem>> {
-    const { connection, token } = this.accountContext(account);
+    const { connection, token, platform } = this.accountContext(account);
+    if (platform === 'facebook') return this.facebookListMedia(account, connection, token, cursor);
     const path = `/${encodeURIComponent(account.providerAccountId)}/media?fields=id,permalink,timestamp,caption,media_type,media_url,thumbnail_url&limit=100`;
     return this.collectItems(
       connection.loginKind,
@@ -182,8 +205,13 @@ export class MetaProvider implements SocialProvider {
   }
 
   async listComments(account: AccountRef, mediaId: string, cursor?: string): Promise<ProviderPage<ProviderComment>> {
-    const { connection, token } = this.accountContext(account);
+    const { connection, token, platform } = this.accountContext(account);
     this.assertMediaBelongsToAccount(account.accountId, mediaId);
+    if (platform === 'facebook') {
+      return this.collectItems('facebook_login', connection.graphVersion,
+        `/${encodeURIComponent(mediaId)}/comments?filter=stream&summary=true&fields=${FACEBOOK_COMMENT_FIELDS}&limit=100`,
+        token, cursor, facebookComment, 1);
+    }
     const path = `/${encodeURIComponent(mediaId)}/comments?fields=id,text,username,from,timestamp,parent_id&limit=100`;
     return this.collectItems(
       connection.loginKind,
@@ -204,8 +232,12 @@ export class MetaProvider implements SocialProvider {
   }
 
   async getComment(account: AccountRef, commentId: string): Promise<ProviderComment> {
-    const { connection, token } = this.accountContext(account);
+    const { connection, token, platform } = this.accountContext(account);
     this.assertCommentBelongsToAccount(account.accountId, commentId);
+    if (platform === 'facebook') {
+      return facebookComment(await this.request('facebook_login', connection.graphVersion,
+        `/${encodeURIComponent(commentId)}?fields=${FACEBOOK_COMMENT_FIELDS}`, token));
+    }
     const row = await this.request(
       connection.loginKind,
       connection.graphVersion,
@@ -227,7 +259,8 @@ export class MetaProvider implements SocialProvider {
     commentId: string,
     payload: PrivateReplyPayload,
   ): Promise<SendResult> {
-    const { connection, token } = this.accountContext(account);
+    const { connection, token, platform } = this.accountContext(account);
+    if (platform === 'facebook') return this.facebookSendPrivateReply(account, connection.graphVersion, token, commentId, payload);
     if (!validPrivateReplyPayload(payload)) {
       return { outcome: 'definitive_rejection', safeErrorCode: 'invalid_reply_payload' };
     }
@@ -276,7 +309,9 @@ export class MetaProvider implements SocialProvider {
    * other call: fixed host, bearer header, redirects rejected, bounded body and timeout.
    */
   async replyToComment(account: AccountRef, commentId: string, message: string): Promise<PublicReplyResult> {
-    const { connection, token } = this.accountContext(account);
+    const { connection, token, platform } = this.accountContext(account);
+    // Facebook public replies (POST /{comment}/comments) are NOT verified live: refused with a typed code, no request.
+    if (platform === 'facebook') return { outcome: 'definitive_rejection', safeErrorCode: PLATFORM_FEATURE_NOT_SUPPORTED_CODE };
     if (typeof message !== 'string' || !message.trim() || message.length > PUBLIC_REPLY_MESSAGE_MAX) {
       return { outcome: 'definitive_rejection', safeErrorCode: 'invalid_public_reply' };
     }
@@ -308,7 +343,9 @@ export class MetaProvider implements SocialProvider {
     } catch {
       return { status: 'rejected', safeErrorCode: 'comment_not_owned' };
     }
-    const { connection, token } = this.accountContext(account);
+    const { connection, token, platform } = this.accountContext(account);
+    // Facebook hide (is_hidden) is NOT verified live: refused with a typed code, no request.
+    if (platform === 'facebook') return { status: 'rejected', safeErrorCode: PLATFORM_FEATURE_NOT_SUPPORTED_CODE };
     try {
       const result = await this.request(
         connection.loginKind,
@@ -330,7 +367,8 @@ export class MetaProvider implements SocialProvider {
     } catch {
       return { status: 'rejected', safeErrorCode: 'comment_not_owned' };
     }
-    const { connection, token } = this.accountContext(account);
+    const { connection, token, platform } = this.accountContext(account);
+    if (platform === 'facebook') return { status: 'rejected', safeErrorCode: PLATFORM_FEATURE_NOT_SUPPORTED_CODE };
     try {
       const result = await this.request(
         connection.loginKind,
@@ -354,7 +392,7 @@ export class MetaProvider implements SocialProvider {
    */
   async diagnoseConversation(account: AccountRef, igsid: string): Promise<ConversationDiagnostics> {
     if (!opaqueId(igsid)) return { found: false, messages: [], safeErrorCode: 'invalid_igsid' };
-    const { connection, token } = this.accountContext(account);
+    const { connection, token } = this.instagramContext(account);
     const get = async (path: string, first = false): Promise<MetaObject> => {
       if (!first) await this.diagnosticPause();
       return this.request(connection.loginKind, connection.graphVersion, path, token);
@@ -414,7 +452,7 @@ export class MetaProvider implements SocialProvider {
         ? { attachment: { type: 'template', payload: { template_type: 'button', text: candidate.text, buttons } } }
         : { text: candidate.text };
     }
-    const { connection, token } = this.accountContext(account);
+    const { connection, token } = this.instagramContext(account);
     try {
       const result = await this.request(connection.loginKind, connection.graphVersion,
         `/${encodeURIComponent(account.providerAccountId)}/messages`, token,
@@ -440,7 +478,7 @@ export class MetaProvider implements SocialProvider {
     if (!Number.isFinite(after) || typeof search.titleNormalized !== 'string' || !search.titleNormalized) {
       return { found: false, pollError: 'invalid_tap_search' };
     }
-    const { connection, token } = this.accountContext(account);
+    const { connection, token } = this.instagramContext(account);
     const get = async (path: string, first = false): Promise<MetaObject> => {
       if (!first) await this.diagnosticPause();
       return this.request(connection.loginKind, connection.graphVersion, path, token);
@@ -479,7 +517,7 @@ export class MetaProvider implements SocialProvider {
    */
   async getUserProfile(account: AccountRef, igsid: string): Promise<UserProfileProbe> {
     if (!opaqueId(igsid)) return { ok: false, safeErrorCode: 'invalid_igsid' };
-    const { connection, token } = this.accountContext(account);
+    const { connection, token } = this.instagramContext(account);
     const requestedFields = PROFILE_FIELDS;
     const hostKind = connection.loginKind === 'instagram_login' ? 'instagram' as const : 'facebook' as const;
     try {
@@ -505,13 +543,81 @@ export class MetaProvider implements SocialProvider {
     }
   }
 
+  /**
+   * Facebook Page feed: `GET /{page-id}/feed` (verified live with a Page token). Only published posts are returned
+   * (an unpublished or scheduled post cannot have comments). Same hardened `request`/`collectItems` path as Instagram.
+   */
+  private async facebookListMedia(
+    account: AccountRef,
+    connection: ReturnType<typeof getConnectionCredential>,
+    token: string,
+    cursor?: string,
+  ): Promise<ProviderPage<MediaItem>> {
+    const page = await this.collectItems<MediaItem & { published: boolean }>(
+      'facebook_login',
+      connection.graphVersion,
+      `/${encodeURIComponent(account.providerAccountId)}/feed?fields=id,created_time,message,permalink_url,is_published&limit=100`,
+      token,
+      cursor,
+      (item) => ({
+        mediaId: requiredString(item.id),
+        permalink: string(item.permalink_url),
+        publishedAt: string(item.created_time),
+        caption: mediaCaption(item.message),
+        mediaType: 'POST' as const,
+        thumbnailUrl: undefined,
+        published: item.is_published !== false,
+      }),
+    );
+    return { ...page, items: page.items.filter((item) => item.published).map(({ published: _published, ...media }) => media) };
+  }
+
+  /**
+   * Facebook private reply: `POST /{page-id}/messages` with `{ recipient: { comment_id }, message: { text } }` and a
+   * bearer header (verified live: returns `recipient_id` + `message_id`). Text only. Facebook buttons/templates are NOT
+   * verified, so URL buttons are appended to the text as `<title>: <https url>` lines; postback buttons and quick
+   * replies are never sent. Nothing but the Authorization header carries the token.
+   */
+  private async facebookSendPrivateReply(
+    account: AccountRef,
+    version: string,
+    token: string,
+    commentId: string,
+    payload: PrivateReplyPayload,
+  ): Promise<SendResult> {
+    if (!validPrivateReplyPayload(payload) || payload.postbackButtons !== undefined || payload.quickReplies !== undefined) {
+      return { outcome: 'definitive_rejection', safeErrorCode: 'invalid_reply_payload' };
+    }
+    const text = facebookMessageText(payload.text, payload.buttons);
+    if (text === undefined) return { outcome: 'definitive_rejection', safeErrorCode: 'invalid_reply_payload' };
+    try {
+      this.assertCommentBelongsToAccount(account.accountId, commentId);
+    } catch {
+      return { outcome: 'definitive_rejection', safeErrorCode: 'comment_not_owned' };
+    }
+    try {
+      const result = await this.request('facebook_login', version, `/${encodeURIComponent(account.providerAccountId)}/messages`, token,
+        { method: 'POST', body: JSON.stringify({ recipient: { comment_id: commentId }, message: { text } }) });
+      const messageId = string(result.message_id)?.trim();
+      if (!messageId) {
+        return { outcome: 'ambiguous', safeErrorCode: 'meta_missing_message_id', usageHeaders: safeUsage(object(result.__safe_usage)) };
+      }
+      const recipientId = opaqueId(result.recipient_id);
+      return { outcome: 'accepted', messageId, ...(recipientId ? { recipientId } : {}), usageHeaders: safeUsage(object(result.__safe_usage)) };
+    } catch (error) {
+      return facebookSendFailure(error);
+    }
+  }
+
   private async diagnosticPause(): Promise<void> {
     const spacing = Math.max(0, this.options.diagnosticSpacingMs ?? DIAGNOSTIC_SPACING_MS);
     if (spacing > 0) await new Promise((resolve) => setTimeout(resolve, spacing));
   }
 
   async readMessage(account: AccountRef, messageId: string): Promise<MessageReadback> {
-    const { connection, token } = this.accountContext(account);
+    const { connection, token, platform } = this.accountContext(account);
+    // Meta gives no verified way to read a Facebook message back: never claim one.
+    if (platform === 'facebook') throw new PlatformFeatureNotSupportedError('message_readback');
     const result = await this.request(
       connection.loginKind,
       connection.graphVersion,
@@ -584,11 +690,22 @@ export class MetaProvider implements SocialProvider {
     };
   }
 
+  /** Context for Instagram-only endpoints (follow gate, conversation diagnostics): a Page account never reaches them. */
+  private instagramContext(account: AccountRef): { connection: ReturnType<typeof getConnectionCredential>; token: string } {
+    const context = this.accountContext(account);
+    if (context.platform !== 'instagram') throw new PlatformFeatureNotSupportedError('instagram_only');
+    return context;
+  }
+
   private accountContext(account: AccountRef): {
     connection: ReturnType<typeof getConnectionCredential>;
     token: string;
+    platform: 'instagram' | 'facebook';
   } {
     const summary = getAccountSummary(this.database, account.accountId);
+    // The stored platform decides (never the caller's ref). A Page account is refused while the switch is off.
+    assertPlatformEnabled(summary.platform, this.options.facebookPagesAvailable);
+    const platform = summary.platform === 'facebook' ? 'facebook' : 'instagram';
     const stored = getAccountCredential(this.database, account.accountId);
     if (stored.connectionId !== account.connectionId || stored.providerAccountId !== account.providerAccountId) {
       throw new Error('Account reference does not match its stored owner');
@@ -603,7 +720,9 @@ export class MetaProvider implements SocialProvider {
       ? stored.secret ? this.vault.decrypt(`account:${account.accountId}`, stored.secret) : ''
       : this.vault.decrypt(account.connectionId, connection.secret);
     if (!token) throw new Error('Validated account credential is unavailable');
-    return { connection, token };
+    // Page endpoints only exist on graph.facebook.com with a Page token.
+    if (platform === 'facebook' && connection.loginKind !== 'facebook_login') throw new PlatformNotSupportedError();
+    return { connection, token, platform };
   }
 
   private assertMediaBelongsToAccount(accountId: string, mediaId: string): void {
@@ -839,6 +958,54 @@ function sendFailure(error: unknown): SendResult {
     metaSubcode: safeError?.metaSubcode,
     usageHeaders: safeError?.usageHeaders,
   };
+}
+
+/** Fields read for every Facebook comment (verified live): author only when the person has a role on the app. */
+const FACEBOOK_COMMENT_FIELDS = 'id,message,created_time,from,can_reply_privately,can_comment,is_hidden,parent{id}';
+
+/**
+ * Maps a Facebook comment. `from` is absent for people without a role on the app: then username and authorId stay
+ * undefined (never guessed). `from.name` is a display name, not a handle; it only feeds `{{username}}`.
+ */
+function facebookComment(item: MetaObject): ProviderComment {
+  const from = object(item.from);
+  const name = string(from?.name)?.trim();
+  return {
+    commentId: requiredString(item.id),
+    text: string(item.message),
+    username: name ? name : undefined,
+    createdAt: string(item.created_time),
+    parentId: string(object(item.parent)?.id),
+    authorId: opaqueId(from?.id),
+    canReplyPrivately: typeof item.can_reply_privately === 'boolean' ? item.can_reply_privately : undefined,
+  };
+}
+
+/** Meta error subcodes (docs-based, not all verified live) for private replies to a comment. */
+const FACEBOOK_WINDOW_CLOSED = new Set(['10/2534022', '10/2018278']);
+const FACEBOOK_RATE_LIMIT_CODES = new Set([4, 17, 32, 613, 80001]);
+
+/**
+ * Facebook private-reply failure. 4xx = definitive (provably not sent); timeouts, network errors, 5xx and malformed
+ * bodies stay ambiguous (UNKNOWN_OUTCOME, never retried). Documented codes get stable names:
+ * 100/2534025 comment not valid for a private reply, 10/2534022 and 10/2018278 window closed, 200-299 permission,
+ * 551 recipient cannot receive messages, 4/17/32/613/80001 throttling (retryable), 190 invalid or expired token.
+ */
+function facebookSendFailure(error: unknown): SendResult {
+  const base = sendFailure(error);
+  const safeError = error instanceof MetaSafeError ? error : undefined;
+  if (base.outcome !== 'definitive_rejection' || safeError?.code !== 'meta_api_error') return base;
+  const code = safeError.metaCode;
+  const subcode = safeError.metaSubcode;
+  const throttled = base.httpStatus === 429 || (code !== undefined && FACEBOOK_RATE_LIMIT_CODES.has(code));
+  const safeErrorCode = code === 190 ? 'facebook_token_invalid'
+    : throttled ? 'facebook_rate_limited'
+      : code === 100 && subcode === 2534025 ? 'comment_not_valid_for_private_reply'
+        : code !== undefined && FACEBOOK_WINDOW_CLOSED.has(`${code}/${subcode}`) ? 'private_reply_window_closed'
+          : code === 551 ? 'recipient_cannot_receive_messages'
+            : code !== undefined && (code === 10 || code === 3 || code === 102 || (code >= 200 && code <= 299)) ? 'facebook_permission_denied'
+              : base.safeErrorCode;
+  return { ...base, safeErrorCode, ...(throttled ? { rateLimited: true } : {}) };
 }
 
 const PUBLIC_REPLY_MESSAGE_MAX = 1000;

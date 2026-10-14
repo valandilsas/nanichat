@@ -1,6 +1,8 @@
 import type { DatabaseSync } from 'node:sqlite';
+import { normalizedAccountIdentity } from '../core/account-identity.ts';
 import { AccountAdoptionRequiredError, RepositoryConflictError } from '../core/errors.ts';
 import type {
+  AccountPlatform,
   AccountStatus,
   ConnectionStatus,
   ConnectionValidation,
@@ -28,6 +30,8 @@ export type NewDiscoveredAccount = {
   displayName?: string | null;
   accountType?: string | null;
   relatedPageId?: string | null;
+  /** Defaults to 'instagram'. Pages get a namespaced normalized username. */
+  platform?: AccountPlatform;
   status: AccountStatus;
   capabilities?: string[];
   /** Allow taking over an account whose current owner connection is disconnected or deleted. */
@@ -59,6 +63,7 @@ export type AccountSummary = {
   displayName?: string;
   accountType?: string;
   relatedPageId?: string;
+  platform: AccountPlatform;
   status: string;
 };
 
@@ -164,8 +169,9 @@ export function getConnectionCredential(
 }
 
 export function addDiscoveredAccount(database: DatabaseSync, input: NewDiscoveredAccount): void {
+  const platform = input.platform ?? 'instagram';
   const username = input.username.normalize('NFC').trim().replace(/^@/u, '');
-  const normalized = username.toLocaleLowerCase('und');
+  const normalized = normalizedAccountIdentity(platform, input.providerAccountId, username);
   if (!username || !normalized) throw new TypeError('A discovered account must include a username');
 
   const matches = database.prepare(`SELECT account_id, connection_id, provider_account_id, normalized_username
@@ -179,20 +185,20 @@ export function addDiscoveredAccount(database: DatabaseSync, input: NewDiscovere
 
   if (matches.length) {
     if (matches.length !== 1 || matches[0]!.account_id !== input.accountId) {
-      throw new RepositoryConflictError('This physical Instagram account is already managed or tombstoned under another connection');
+      throw new RepositoryConflictError('This account is already managed or tombstoned under another connection');
     }
     const previousConnectionId = matches[0]!.connection_id;
     if (previousConnectionId !== input.connectionId) {
       const owner = database.prepare('SELECT status FROM connections WHERE id = ?').get(previousConnectionId) as { status: string } | undefined;
       if (owner?.status !== 'disconnected') {
-        throw new RepositoryConflictError('This physical Instagram account is already managed or tombstoned under another connection');
+        throw new RepositoryConflictError('This account is already managed or tombstoned under another connection');
       }
       if (!input.adopt) throw new AccountAdoptionRequiredError();
     }
     const now = new Date().toISOString();
     // Adoption only moves connection_id: the account_id (and every row that references it) stays untouched.
     database.prepare(`UPDATE social_accounts SET connection_id = ?, provider_account_id = ?, username = ?, normalized_username = ?,
-        display_name = ?, account_type = ?, related_page_id = ?, status = ?, capabilities_json = ?,
+        display_name = ?, account_type = ?, related_page_id = ?, platform = ?, status = ?, capabilities_json = ?,
         last_validated_at = ?, monitoring_paused = 0, last_validation_error_code = NULL, updated_at = ?
       WHERE account_id = ? AND connection_id = ?`)
       .run(
@@ -203,6 +209,7 @@ export function addDiscoveredAccount(database: DatabaseSync, input: NewDiscovere
         input.displayName ?? null,
         input.accountType ?? null,
         input.relatedPageId ?? null,
+        platform,
         input.status,
         JSON.stringify(input.capabilities ?? []),
         now,
@@ -214,10 +221,14 @@ export function addDiscoveredAccount(database: DatabaseSync, input: NewDiscovere
   }
 
   const now = new Date().toISOString();
+  // Instagram rows rely on the column default ('instagram'), so the Instagram insert is unchanged and still works
+  // against pre-v19 shapes that tests seed before migrating.
+  const platformColumn = platform === 'instagram' ? '' : ', platform';
+  const platformValue = platform === 'instagram' ? '' : ', ?';
   database.prepare(`INSERT INTO social_accounts
       (account_id, connection_id, provider_account_id, username, normalized_username, display_name,
-       account_type, related_page_id, status, capabilities_json, created_at, updated_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+       account_type, related_page_id, status, capabilities_json, created_at, updated_at${platformColumn})
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?${platformValue})`)
     .run(
       input.accountId,
       input.connectionId,
@@ -231,12 +242,13 @@ export function addDiscoveredAccount(database: DatabaseSync, input: NewDiscovere
       JSON.stringify(input.capabilities ?? []),
       now,
       now,
+      ...(platform === 'instagram' ? [] : [platform]),
     );
 }
 
 const ACCOUNT_SELECT = `SELECT account_id AS accountId, connection_id AS connectionId,
     provider_account_id AS providerAccountId, username, display_name AS displayName,
-    account_type AS accountType, related_page_id AS relatedPageId, status
+    account_type AS accountType, related_page_id AS relatedPageId, platform, status
   FROM social_accounts`;
 
 export function getAccountSummary(database: DatabaseSync, accountId: string): AccountSummary {

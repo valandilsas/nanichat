@@ -12,7 +12,7 @@ export class RepositoryConflictError extends Error {
 export class AccountAdoptionRequiredError extends RepositoryConflictError {
   readonly code = 'account_adoption_required';
   constructor() {
-    super('This Instagram account is already managed under a disconnected connection; adoption must be confirmed');
+    super('This account is already managed under a disconnected connection; adoption must be confirmed');
     this.name = 'AccountAdoptionRequiredError';
   }
 }
@@ -35,5 +35,23 @@ export class InvalidConfigurationError extends Error {
   constructor(message: string) {
     super(message);
     this.name = 'InvalidConfigurationError';
+  }
+}
+
+/** The operation targets an Instagram endpoint but the account is a Facebook Page (inert until the Page engine exists). */
+export class PlatformNotSupportedError extends Error {
+  readonly code = 'platform_not_supported';
+  constructor() {
+    super('This operation is not supported for the account platform');
+    this.name = 'PlatformNotSupportedError';
+  }
+}
+
+/** The account's platform has no implementation of this feature yet (Facebook: hide, delete, public reply, readback). */
+export class PlatformFeatureNotSupportedError extends Error {
+  readonly code = 'platform_feature_not_supported';
+  constructor(readonly feature: string) {
+    super(`This feature is not supported for the account platform: ${feature}`);
+    this.name = 'PlatformFeatureNotSupportedError';
   }
 }

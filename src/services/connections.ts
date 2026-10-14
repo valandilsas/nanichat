@@ -6,6 +6,8 @@ import type {
   MetaLoginKind,
   SocialProvider,
 } from '../core/domain.ts';
+import { assertPlatformEnabled } from './facebook-pages-rules.ts';
+import { normalizedAccountIdentity } from '../core/account-identity.ts';
 import { AccountAdoptionRequiredError, RepositoryConflictError } from '../core/errors.ts';
 import type { CredentialVault } from '../security/vault.ts';
 import {
@@ -54,6 +56,8 @@ export class ConnectionService {
     private readonly database: DatabaseSync,
     private readonly vault: CredentialVault,
     private readonly provider: AccountCredentialProvider,
+    /** `facebookPagesAvailable` carries the SOCIAL_DESK_FACEBOOK_PAGES opt-in (tests may override it). */
+    private readonly options: { facebookPagesAvailable?: boolean } = {},
   ) {}
 
   async create(input: CreateConnectionInput) {
@@ -130,6 +134,7 @@ export class ConnectionService {
       displayName: account.displayName,
       accountType: account.accountType,
       relatedPageId: account.relatedPageId,
+      ...(account.platform && account.platform !== 'instagram' ? { platform: account.platform } : {}),
       capabilities: [...account.capabilities],
     }));
     this.discovered.set(id, safeAccounts);
@@ -142,24 +147,26 @@ export class ConnectionService {
       throw new Error('Validate the connection before selecting an account');
     }
 
-    const normalized = normalizeUsername(candidate.username);
+    const typedUsername = normalizeUsername(candidate.username);
     const verified = (this.discovered.get(id) ?? []).find((account) =>
       account.providerAccountId === candidate.providerAccountId
-      && normalizeUsername(account.username) === normalized);
+      && normalizeUsername(account.username) === typedUsername);
     if (!verified) throw new Error('Select an account from the latest provider discovery results');
+    const platform = verified.platform ?? 'instagram';
+    const normalized = normalizedAccountIdentity(platform, verified.providerAccountId, verified.username);
 
     const matches = this.database.prepare(`SELECT s.account_id, s.connection_id, c.status AS owner_status
       FROM social_accounts s LEFT JOIN connections c ON c.id = s.connection_id
       WHERE s.provider_account_id = ? OR s.normalized_username = ?`)
       .all(verified.providerAccountId, normalized) as Array<{ account_id: string; connection_id: string; owner_status: string | null }>;
     if (matches.length > 1) {
-      throw new RepositoryConflictError('This physical Instagram account is already managed or tombstoned under another connection');
+      throw new RepositoryConflictError('This account is already managed or tombstoned under another connection');
     }
     // Only a disconnected (or deleted) owner can hand its account over, and only after explicit confirmation.
     const foreign = matches.find((row) => row.connection_id !== id);
     if (foreign) {
       if (foreign.owner_status !== 'disconnected') {
-        throw new RepositoryConflictError('This physical Instagram account is already managed or tombstoned under another connection');
+        throw new RepositoryConflictError('This account is already managed or tombstoned under another connection');
       }
       if (!options.adopt) throw new AccountAdoptionRequiredError();
     }
@@ -181,6 +188,7 @@ export class ConnectionService {
         displayName: verified.displayName,
         accountType: verified.accountType,
         relatedPageId: verified.relatedPageId,
+        platform,
         status: 'valid',
         capabilities: verified.capabilities,
         adopt: options.adopt === true,
@@ -202,6 +210,7 @@ export class ConnectionService {
 
   async listMedia(accountId: string) {
     const account = getAccountSummary(this.database, accountId);
+    assertPlatformEnabled(account.platform, this.options.facebookPagesAvailable);
     const connection = getConnectionSummary(this.database, account.connectionId);
     if (account.status !== 'valid' || connection.status !== 'valid' || connection.monitoring_paused) {
       throw new Error('Account is not currently validated');

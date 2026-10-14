@@ -1,7 +1,8 @@
 import { randomUUID } from 'node:crypto';
 import type { DatabaseSync } from 'node:sqlite';
 import type { AccountRef, ProviderComment, SocialProvider } from '../core/domain.ts';
-import { claimingAutomations, classifyComment, ownerRepliedParentIds } from './automations.ts';
+import { claimingAutomations, classifyComment, facebookOwnerRepliedParentIds, ownerRepliedParentIds } from './automations.ts';
+import { assertPlatformEnabled } from './facebook-pages-rules.ts';
 import { getSettings } from './moderation.ts';
 import { classifyForModeration } from './moderation-rules.ts';
 
@@ -31,7 +32,12 @@ type AutomationRow = {
 };
 
 export class Scanner {
-  constructor(private readonly database: DatabaseSync, private readonly provider: Pick<SocialProvider, 'listComments'>) {}
+  constructor(
+    private readonly database: DatabaseSync,
+    private readonly provider: Pick<SocialProvider, 'listComments'>,
+    /** `facebookPagesAvailable` carries the SOCIAL_DESK_FACEBOOK_PAGES opt-in (tests may override it). */
+    private readonly options: { facebookPagesAvailable?: boolean } = {},
+  ) {}
 
   async scanMedia(
     account: AccountRef,
@@ -47,14 +53,18 @@ export class Scanner {
       onPage?: (update: { newComments: number }) => void;
     },
   ): Promise<ScanReport> {
-    const owner = this.database.prepare(`SELECT username, connection_id, provider_account_id, status
+    const owner = this.database.prepare(`SELECT username, connection_id, provider_account_id, status, platform
       FROM social_accounts WHERE account_id=?`).get(account.accountId) as {
-      username: string; connection_id: string; provider_account_id: string; status: string;
+      username: string; connection_id: string; provider_account_id: string; status: string; platform: string;
     } | undefined;
     const media = this.database.prepare(`SELECT 1 FROM media WHERE account_id=? AND media_id=?`).get(account.accountId, mediaId);
     if (!owner || !media || owner.connection_id !== account.connectionId || owner.provider_account_id !== account.providerAccountId) {
       throw new Error('Account or media is not owned by the selected account reference');
     }
+    assertPlatformEnabled(owner.platform, this.options.facebookPagesAvailable);
+    const facebookPageId = owner.platform === 'facebook' ? owner.provider_account_id : undefined;
+    // Facebook only: `can_reply_privately` as reported by the stream in THIS scan (not persisted; the pre-send recheck re-reads it).
+    const canReplyPrivately = new Map<string, boolean>();
     if (owner.status !== 'valid') throw new Error('Account is not validated');
     if (options.kind === 'monitor' && (!options.cutoffAt || !Number.isFinite(Date.parse(options.cutoffAt)))) {
       throw new TypeError('Monitoring requires an explicit valid cutoff');
@@ -111,11 +121,13 @@ export class Scanner {
 
     // Classification runs after every page is persisted so replies seen anywhere in this scan (any page order) count.
     const classifyPersisted = (): void => {
-      const ownerReplied = ownerRepliedParentIds(this.database, account.accountId, mediaId, owner.username);
+      const ownerReplied = facebookPageId !== undefined
+        ? facebookOwnerRepliedParentIds(this.database, account.accountId, mediaId, facebookPageId)
+        : ownerRepliedParentIds(this.database, account.accountId, mediaId, owner.username);
       for (const commentId of persistedIds) {
-        const commentRow = this.database.prepare(`SELECT text, username, created_at, parent_id FROM comments
+        const commentRow = this.database.prepare(`SELECT text, username, created_at, parent_id, author_igsid FROM comments
           WHERE account_id=? AND comment_id=?`).get(account.accountId, commentId) as {
-          text: string | null; username: string | null; created_at: string | null; parent_id: string | null;
+          text: string | null; username: string | null; created_at: string | null; parent_id: string | null; author_igsid: string | null;
         };
         const eligibleRows: ScanCandidate[] = [];
         for (const automation of automations) {
@@ -126,7 +138,11 @@ export class Scanner {
             username: commentRow.username ?? undefined,
             createdAt: commentRow.created_at ?? undefined,
             parentId: commentRow.parent_id ?? undefined,
-          }, phrases.map((item) => item.phrase), owner.username, options.now ?? Date.now(), automation.match_mode, ownerReplied.has(commentId));
+            ...(facebookPageId !== undefined ? {
+              authorId: commentRow.author_igsid ?? undefined, canReplyPrivately: canReplyPrivately.get(commentId),
+            } : {}),
+          }, phrases.map((item) => item.phrase), owner.username, options.now ?? Date.now(), automation.match_mode, ownerReplied.has(commentId),
+          facebookPageId);
           if (classification.reason === 'expired') expiredIds.add(commentId);
           const automationCutoff = options.kind === 'monitor'
             ? automation.monitoring_started_at ?? options.cutoffAt
@@ -206,6 +222,7 @@ export class Scanner {
         if (!comment.commentId || seen.has(comment.commentId)) continue;
         seen.add(comment.commentId);
         this.upsertComment(account.accountId, mediaId, comment);
+        if (comment.canReplyPrivately !== undefined) canReplyPrivately.set(comment.commentId, comment.canReplyPrivately);
         persistedIds.push(comment.commentId);
       }
       options.onPage?.({ newComments: seen.size - seenBefore });
@@ -257,7 +274,8 @@ export class Scanner {
     }
     classifyPersisted();
     const modSettings = getSettings(this.database, account.accountId);
-    if (modSettings.enabled) {
+    // Moderation actions (hide/delete) are not available for Facebook yet, so no flags are raised for Pages.
+    if (modSettings.enabled && facebookPageId === undefined) {
       for (const commentId of persistedIds) {
         const commentRow = this.database.prepare(`SELECT text, username FROM comments WHERE account_id=? AND comment_id=?`).get(account.accountId, commentId) as any;
         if (!commentRow) continue;

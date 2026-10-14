@@ -28,17 +28,19 @@ const applicationLock = acquireApplicationLock(config.dataDir);
 const database = openDatabase(config.dataDir);
 migrateDatabase(database);
 const vault = createVault(config.dataDir, () => listEncryptedCredentials(database));
-const provider = new MetaProvider(database, vault);
+// Opt-in (SOCIAL_DESK_FACEBOOK_PAGES=1, EXPERIMENTAL): Facebook Page accounts stay dormant unless it is set.
+const facebookPages = { facebookPagesAvailable: config.facebookPages };
+const provider = new MetaProvider(database, vault, fetch, facebookPages);
 // Opt-in (SOCIAL_DESK_LEGACY_ACCOUNTS_DIR / SOCIAL_DESK_LEGACY_HOLD_USERNAMES): undefined means no legacy file is ever read.
 const legacyInterlock = legacyInterlockFromConfig(config);
-const queue = new QueueService(database, provider, legacyInterlock ? { legacyInterlock } : {});
-const scanner = new Scanner(database, provider);
-const connections = new ConnectionService(database, vault, provider);
+const queue = new QueueService(database, provider, { ...facebookPages, ...(legacyInterlock ? { legacyInterlock } : {}) });
+const scanner = new Scanner(database, provider, facebookPages);
+const connections = new ConnectionService(database, vault, provider, facebookPages);
 // General (account-wide) automations refresh the account's publication list through the same provider path as the UI.
 // Follow gate (honor system): polls for the tap on the gate button and sends the resource once; never in Dry Run.
 const followGate = new FollowGateService(database, provider, legacyInterlock ? { legacyInterlock } : {});
 // Moderation: *_INTENT flags become UNKNOWN_OUTCOME at startup; auto-hide (real mode only) runs once per tick.
-const scheduler = createScheduler(database, scanner, queue, { provider, mediaRefresher: connections, followGate });
+const scheduler = createScheduler(database, scanner, queue, { provider, mediaRefresher: connections, followGate }, facebookPages);
 const automations = new AutomationService(database);
 const backlog = new BacklogService(database, scanner, queue);
 // AI comment review (off by default): only creates flags, never calls Meta. A job cannot survive a restart.

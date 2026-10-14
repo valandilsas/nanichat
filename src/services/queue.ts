@@ -1,10 +1,14 @@
 import { randomUUID } from 'node:crypto';
 import type { DatabaseSync } from 'node:sqlite';
-import type { AccountRef, MessageReadback, PublicReplyResult, SendResult, SocialProvider } from '../core/domain.ts';
+import type { AccountRef, MessageReadback, ProviderComment, PublicReplyResult, SendResult, SocialProvider } from '../core/domain.ts';
+import { saveConnectionValidation } from '../db/repositories.ts';
 import {
-  claimsMediaSql, classifyComment, hasEnabledMediaAutomation, hasOwnerReply, isPastPrivateReplyWindow, matchAutomation, renderFollowGatePayload,
-  renderReply, storedFollowGateConfig,
+  claimsMediaSql, classifyComment, facebookHasOwnerReply, hasEnabledMediaAutomation, hasOwnerReply, isPastPrivateReplyWindow, matchAutomation,
+  renderFollowGatePayload, renderReply, storedFollowGateConfig,
 } from './automations.ts';
+import {
+  FACEBOOK_READBACK_NOT_AVAILABLE_CODE, PLATFORM_FEATURE_NOT_SUPPORTED_CODE, assertPlatformEnabled, facebookPagesAvailable,
+} from './facebook-pages-rules.ts';
 import { storedResourceAttachment } from './resource-attachment.ts';
 import { FOLLOW_GATE_RETIRED_CODE, GATE_FIRST_POLL_MS, followGateAvailable, safeIgsid } from './follow-gate-rules.ts';
 import {
@@ -24,7 +28,7 @@ const PUBLIC_RETRY_BASE_DELAY_MS = 30_000;
 type PublicRow = {
   queue_item_id: string; account_id: string; comment_id: string; automation_id: string; state: string;
   public_reply_text: string | null; public_reply_attempts: number;
-  connection_id: string; provider_account_id: string; username: string;
+  connection_id: string; provider_account_id: string; username: string; platform: string;
 };
 type PublicEvent = 'intent_recorded' | 'accepted' | 'definitive_rejection' | 'ambiguous' | 'skipped' | 'expired' | 'manual_retry';
 export type LegacyQueueInterlock = {
@@ -45,6 +49,7 @@ type QueueRow = {
   username: string;
   provider_account_id: string;
   connection_id: string;
+  platform: string;
   automation_status: string;
   automation_scope: 'media' | 'account';
   automation_media_id: string | null;
@@ -89,8 +94,15 @@ export class QueueService {
       rng?: () => number;
       /** TEST-ONLY override of FOLLOW_GATE_AVAILABLE (the retired follow gate); production never passes it. */
       followGateAvailable?: boolean;
+      /** Facebook Pages switch: server.ts passes SOCIAL_DESK_FACEBOOK_PAGES here; tests may override it. */
+      facebookPagesAvailable?: boolean;
     } = {},
   ) {}
+
+  /** SQL fragment: Facebook Page items are only processed while Pages are enabled; otherwise they stay untouched. */
+  private platformFilter(alias: string): string {
+    return facebookPagesAvailable(this.options.facebookPagesAvailable) ? '' : `AND ${alias}.platform='instagram'`;
+  }
 
   async enqueueReviewed(accountId: string, automationId: string, reviewedCommentIds: string[]): Promise<string[]> {
     if (!reviewedCommentIds.length) return [];
@@ -114,7 +126,7 @@ export class QueueService {
        public_reply_text, public_reply_variant, public_reply_selected_at)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
     // A media-scoped automation only accepts comments of its own media; a general one any media of the same account.
-    const selectComment = this.database.prepare(`SELECT comment_id, media_id, text, username, created_at, parent_id
+    const selectComment = this.database.prepare(`SELECT comment_id, media_id, text, username, created_at, parent_id, author_igsid
       FROM comments WHERE account_id = ? AND comment_id = ?`);
     const keywords = this.database.prepare(`SELECT phrase FROM automation_keywords
       WHERE account_id = ? AND automation_id = ? ORDER BY rowid`)
@@ -129,6 +141,7 @@ export class QueueService {
     for (const commentId of [...new Set(reviewedCommentIds)]) {
       const comment = selectComment.get(accountId, commentId) as {
         comment_id: string; media_id: string; text: string | null; username: string | null; created_at: string | null; parent_id: string | null;
+        author_igsid: string | null;
       } | undefined;
       if (!comment || (automation.scope === 'media' && comment.media_id !== automation.media_id)) {
         throw new Error('Reviewed comment does not belong to this account and automation media');
@@ -136,8 +149,11 @@ export class QueueService {
       if (automation.scope === 'account' && hasEnabledMediaAutomation(this.database, accountId, comment.media_id)) {
         throw new Error('General automation yields to the media-specific automation of this publication');
       }
-      const account = this.database.prepare(`SELECT username FROM social_accounts WHERE account_id = ?`).get(accountId) as { username: string } | undefined;
+      const account = this.database.prepare(`SELECT username, platform, provider_account_id FROM social_accounts WHERE account_id = ?`)
+        .get(accountId) as { username: string; platform: string; provider_account_id: string } | undefined;
       if (!account) throw new Error('Account does not exist');
+      assertPlatformEnabled(account.platform, this.options.facebookPagesAvailable);
+      const facebookPageId = account.platform === 'facebook' ? account.provider_account_id : undefined;
       const mediaRow = this.database.prepare(`SELECT permalink FROM media WHERE account_id = ? AND media_id = ?`)
         .get(accountId, comment.media_id) as { permalink: string | null } | undefined;
       // {{media}} is the permalink of the comment's publication (or its media ID), bounded to 100 characters.
@@ -145,8 +161,10 @@ export class QueueService {
       const classification = classifyComment({
         commentId, text: comment.text ?? undefined, username: comment.username ?? undefined,
         createdAt: comment.created_at ?? undefined, parentId: comment.parent_id ?? undefined,
+        ...(facebookPageId !== undefined ? { authorId: comment.author_igsid ?? undefined } : {}),
       }, keywords.map(({ phrase }) => phrase), account.username, Date.now(), automation.match_mode,
-      hasOwnerReply(this.database, accountId, commentId, account.username));
+      facebookPageId !== undefined ? facebookHasOwnerReply(this.database, accountId, commentId, facebookPageId)
+        : hasOwnerReply(this.database, accountId, commentId, account.username), facebookPageId);
       if (!classification.eligible || classification.matchedKeywords.length === 0) {
         throw new Error('Comment is not safely eligible for a matching keyword');
       }
@@ -253,11 +271,21 @@ export class QueueService {
         .run(YIELDED_REASON, new Date().toISOString(), row.queue_item_id);
       return row.queue_item_id;
     }
+    // Facebook: Meta reports `can_reply_privately: false` once a private reply exists (e.g. made by another automation)
+    // or when the comment cannot receive one. Skip before any send intent or POST.
+    if (current && current.platform === 'facebook' && current.connection_id === account.connectionId
+      && current.provider_account_id === account.providerAccountId
+      && freshComment.commentId === row.comment_id && freshComment.canReplyPrivately === false) {
+      this.database.prepare(`UPDATE queue_items SET state='SKIPPED', state_reason_code='private_reply_unavailable', updated_at=?
+        WHERE queue_item_id=? AND state IN ('QUEUED','FAILED_RETRYABLE')`)
+        .run(new Date().toISOString(), row.queue_item_id);
+      return row.queue_item_id;
+    }
     // The account already answered this root publicly (stored reply): skip before any send intent or POST.
     if (current && current.connection_id === account.connectionId
       && current.provider_account_id === account.providerAccountId
       && freshComment.commentId === row.comment_id
-      && hasOwnerReply(this.database, row.account_id, row.comment_id, row.username)) {
+      && this.ownerReplied(row.platform, row.account_id, row.comment_id, row.username, row.provider_account_id)) {
       this.database.prepare(`UPDATE queue_items SET state='SKIPPED', state_reason_code='owner_replied', updated_at=?
         WHERE queue_item_id=? AND state IN ('QUEUED','FAILED_RETRYABLE')`)
         .run(new Date().toISOString(), row.queue_item_id);
@@ -302,10 +330,16 @@ export class QueueService {
       return row.queue_item_id;
     }
     if (result.outcome === 'definitive_rejection') {
-      const retryable = result.httpStatus === 429;
+      const retryable = result.httpStatus === 429 || result.rateLimited === true;
       this.markState(row, retryable ? 'FAILED_RETRYABLE' : 'FAILED_PERMANENT',
         retryable ? 'retryable_failure' : 'definitive_rejection', result.safeErrorCode ?? 'provider_rejection',
         { usageHeaders: result.usageHeaders, retryAfter: result.usageHeaders?.retryAfter }, 'SENDING');
+      // Facebook: an invalid/expired Page token (Meta 190) invalidates the connection and pauses its accounts, like a
+      // failed validation does, so no further sends are attempted with it.
+      if (current.platform === 'facebook' && result.safeErrorCode === 'facebook_token_invalid') {
+        saveConnectionValidation(this.database, account.connectionId,
+          { status: 'invalid', observedAt: new Date(this.clock()).toISOString(), capabilities: [], safeErrorCode: 'meta_190' });
+      }
       return row.queue_item_id;
     }
     if (!result.messageId?.trim()) {
@@ -335,6 +369,13 @@ export class QueueService {
       this.database.exec('ROLLBACK');
       throw error;
     }
+    if (current.platform === 'facebook') {
+      // Meta gives no verified readback for Facebook messages: the accepted response with a message_id is the only
+      // confirmation. Say so explicitly instead of calling the provider or implying a verified readback.
+      this.appendEvent(row, 'readback', result.messageId, FACEBOOK_READBACK_NOT_AVAILABLE_CODE,
+        { observed: false, skipped: true, reason: 'facebook_has_no_message_readback' });
+      return row.queue_item_id;
+    }
     await this.recordReadback(row, account, result.messageId, JSON.parse(row.payload_json) as SentPayload);
     return row.queue_item_id;
   }
@@ -345,13 +386,14 @@ export class QueueService {
    */
   async verifyReadback(accountId: string, queueItemId: string): Promise<{ observed: boolean; safeErrorCode?: string; matches?: boolean }> {
     const item = this.database.prepare(`SELECT q.queue_item_id, q.account_id, q.state, q.payload_json, s.connection_id,
-        s.provider_account_id, s.username
+        s.provider_account_id, s.username, s.platform
       FROM queue_items q JOIN social_accounts s ON s.account_id=q.account_id
       WHERE q.queue_item_id=? AND q.account_id=?`).get(queueItemId, accountId) as {
         queue_item_id: string; account_id: string; state: string; payload_json: string;
-        connection_id: string; provider_account_id: string; username: string;
+        connection_id: string; provider_account_id: string; username: string; platform: string;
       } | undefined;
     if (!item) throw new QueueReadbackError(404, 'queue_item_not_found');
+    if (item.platform === 'facebook') throw new QueueReadbackError(409, 'readback_not_available_for_platform');
     if (item.state !== 'SENT') throw new QueueReadbackError(409, 'queue_item_not_sent');
     const accepted = this.database.prepare(`SELECT message_id FROM send_attempts
       WHERE account_id=? AND queue_item_id=? AND event_type='accepted' AND message_id IS NOT NULL
@@ -481,6 +523,11 @@ export class QueueService {
       this.transitionPublic(row, ['PENDING'], 'SKIPPED', 'skipped', { code: 'private_not_sent' });
       return row.queue_item_id;
     }
+    // Facebook public replies are not verified live: explicit, visible skip (the private reply is unaffected).
+    if (row.platform === 'facebook') {
+      this.transitionPublic(row, ['PENDING'], 'SKIPPED', 'skipped', { code: PLATFORM_FEATURE_NOT_SUPPORTED_CODE });
+      return row.queue_item_id;
+    }
     const acceptedAt = this.privateAcceptedAt(row.queue_item_id);
     if (acceptedAt === undefined || now - acceptedAt >= PUBLIC_REPLY_WINDOW_MS) {
       this.transitionPublic(row, ['PENDING'], 'EXPIRED', 'expired', { code: 'public_reply_window_elapsed' });
@@ -588,14 +635,14 @@ export class QueueService {
 
   private nextPublic(accountId: string | undefined, now: number): PublicRow | undefined {
     return this.database.prepare(`SELECT q.queue_item_id, q.account_id, q.comment_id, q.automation_id, q.state, q.public_reply_text,
-        q.public_reply_attempts, s.connection_id, s.provider_account_id, s.username
+        q.public_reply_attempts, s.connection_id, s.provider_account_id, s.username, s.platform
       FROM queue_items q
       JOIN social_accounts s ON s.account_id=q.account_id
       JOIN connections c ON c.id=s.connection_id
       WHERE q.public_reply_state='PENDING' AND (q.public_reply_next_at IS NULL OR q.public_reply_next_at<=?)
         AND s.status='valid' AND s.monitoring_paused=0 AND c.status='valid' AND c.monitoring_paused=0 AND c.deleted_at IS NULL
         AND NOT EXISTS (SELECT 1 FROM account_send_holds h WHERE h.account_id=q.account_id)
-        ${accountId ? 'AND q.account_id=?' : ''}
+        ${this.platformFilter('s')} ${accountId ? 'AND q.account_id=?' : ''}
       ORDER BY q.created_at, q.rowid LIMIT 1`).get(new Date(now).toISOString(), ...(accountId ? [accountId] : [])) as PublicRow | undefined;
   }
 
@@ -774,7 +821,7 @@ export class QueueService {
     return this.database.prepare(`SELECT q.queue_item_id, q.account_id, q.comment_id, q.automation_id, q.state,
         q.dry_run, q.payload_json, cm.media_id, a.media_id AS automation_media_id, a.scope AS automation_scope,
         a.status AS automation_status, a.real_enabled, a.match_mode,
-        a.reply_text, a.version AS automation_version, s.username, s.provider_account_id, s.connection_id,
+        a.reply_text, a.version AS automation_version, s.username, s.provider_account_id, s.connection_id, s.platform,
         a.buttons_json, q.attempt_count, s.status AS account_status, c.status AS connection_status, c.monitoring_paused AS connection_paused
         , EXISTS (SELECT 1 FROM account_send_holds h WHERE h.account_id=q.account_id) AS send_held
       FROM queue_items q
@@ -783,10 +830,17 @@ export class QueueService {
       JOIN social_accounts s ON s.account_id=q.account_id
       JOIN connections c ON c.id=s.connection_id
       WHERE (q.state='QUEUED' OR (q.state='FAILED_RETRYABLE' AND (q.next_attempt_at IS NULL OR q.next_attempt_at<=?)))
-        ${filter} ORDER BY q.created_at, q.rowid LIMIT 1`).get(new Date(now).toISOString(), ...(parameter ? [parameter] : [])) as QueueRow | undefined;
+        ${this.platformFilter('s')} ${filter} ORDER BY q.created_at, q.rowid LIMIT 1`).get(new Date(now).toISOString(), ...(parameter ? [parameter] : [])) as QueueRow | undefined;
   }
 
-  private stillAllowed(row: QueueRow, comment: { commentId: string; text?: string; username?: string; createdAt?: string; parentId?: string }): boolean {
+  /** Owner-reply rule: by Page author id for Facebook (no usernames), by the account username for Instagram (unchanged). */
+  private ownerReplied(platform: string, accountId: string, commentId: string, username: string, providerAccountId: string): boolean {
+    return platform === 'facebook'
+      ? facebookHasOwnerReply(this.database, accountId, commentId, providerAccountId)
+      : hasOwnerReply(this.database, accountId, commentId, username);
+  }
+
+  private stillAllowed(row: QueueRow, comment: ProviderComment): boolean {
     if (comment.commentId !== row.comment_id || row.dry_run || !row.real_enabled || row.automation_status !== 'enabled'
       || row.connection_status !== 'valid' || row.connection_paused !== 0 || row.account_status !== 'valid') return false;
     if (row.send_held) return false;
@@ -795,7 +849,8 @@ export class QueueService {
     const matches = this.database.prepare(`SELECT phrase FROM automation_keywords WHERE account_id=? AND automation_id=?`)
       .all(row.account_id, row.automation_id) as Array<{ phrase: string }>;
     const classification = classifyComment(comment, matches.map((item) => item.phrase), row.username, this.clock(), row.match_mode,
-      hasOwnerReply(this.database, row.account_id, row.comment_id, row.username));
+      this.ownerReplied(row.platform, row.account_id, row.comment_id, row.username, row.provider_account_id),
+      row.platform === 'facebook' ? row.provider_account_id : undefined);
     return classification.eligible && classification.matchedKeywords.length > 0;
   }
 

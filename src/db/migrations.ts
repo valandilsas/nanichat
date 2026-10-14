@@ -1,6 +1,6 @@
 import type { DatabaseSync } from 'node:sqlite';
 
-const VERSION = 18;
+const VERSION = 19;
 
 const INITIAL_SCHEMA = `
 CREATE TABLE connections (
@@ -180,6 +180,7 @@ export function migrateDatabase(database: DatabaseSync, targetVersion: number = 
     if (current < 16 && target >= 16) migrateCommentModeration(database);
     if (current < 17 && target >= 17) migrateModerationAi(database);
     if (current < 18 && target >= 18) migrateLocalAiModel(database);
+    if (current < 19 && target >= 19) migrateAccountPlatform(database);
     database.exec('COMMIT');
   } catch (error) {
     database.exec('ROLLBACK');
@@ -620,5 +621,16 @@ function migrateLocalAiModel(database: DatabaseSync): void {
   database.exec(`
     ALTER TABLE moderation_ai_settings ADD COLUMN local_model TEXT;
     PRAGMA user_version = 18;
+  `);
+}
+
+/**
+ * v19 (Facebook Pages base): every account gets a platform. Existing rows backfill to 'instagram' through the column
+ * default; Page accounts are only created once Facebook Pages are enabled. Additive, no history is touched.
+ */
+function migrateAccountPlatform(database: DatabaseSync): void {
+  database.exec(`
+    ALTER TABLE social_accounts ADD COLUMN platform TEXT NOT NULL DEFAULT 'instagram' CHECK (platform IN ('instagram','facebook'));
+    PRAGMA user_version = 19;
   `);
 }

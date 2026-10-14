@@ -1,5 +1,6 @@
 import type { DatabaseSync } from 'node:sqlite';
 import type { AccountRef, SocialProvider } from '../core/domain.ts';
+import { assertPlatformEnabled, facebookPagesAvailable } from './facebook-pages-rules.ts';
 import { moderationEngine } from './moderation.ts';
 import { QueueService } from './queue.ts';
 import { Scanner } from './scanner.ts';
@@ -32,6 +33,8 @@ export type SchedulerOptions = {
   followGate?: { recoverInterrupted(): number; processDue(): Promise<number> };
   /** Moderation engine: recovered at startup, run after the reply steps on each tick. */
   moderation?: { recoverInterrupted(): void; processAutoHide(): Promise<void> };
+  /** Facebook Pages switch: server.ts passes SOCIAL_DESK_FACEBOOK_PAGES here; tests may override it. */
+  facebookPagesAvailable?: boolean;
 };
 
 export class Scheduler {
@@ -55,20 +58,26 @@ export class Scheduler {
     this.queue.expireStale();
   }
 
+  /** SQL fragment: Instagram only, plus Facebook Pages when they are enabled (switch on, or the test override). */
+  private platformFilter(prefix: string): string {
+    return facebookPagesAvailable(this.options.facebookPagesAvailable) ? '' : `AND ${prefix}platform='instagram'`;
+  }
+
   start(accountId: string): void {
     const row = this.database.prepare(`SELECT s.status AS account_status, c.status AS connection_status,
-      c.deleted_at FROM social_accounts s JOIN connections c ON c.id=s.connection_id WHERE s.account_id=?`)
-      .get(accountId) as { account_status: string; connection_status: string; deleted_at: string | null } | undefined;
+      c.deleted_at, s.platform FROM social_accounts s JOIN connections c ON c.id=s.connection_id WHERE s.account_id=?`)
+      .get(accountId) as { account_status: string; connection_status: string; deleted_at: string | null; platform: string } | undefined;
     if (!row || row.account_status !== 'valid' || row.connection_status !== 'valid' || row.deleted_at) {
       throw new Error('Only a currently validated account can be monitored');
     }
+    assertPlatformEnabled(row.platform, this.options.facebookPagesAvailable);
     this.database.prepare(`UPDATE social_accounts SET monitoring_paused=0 WHERE account_id=?`).run(accountId);
     this.setGlobalMonitor(true);
     this.ensureTimer();
   }
 
   startAll(): void {
-    this.database.prepare(`UPDATE social_accounts SET monitoring_paused=0 WHERE status='valid'
+    this.database.prepare(`UPDATE social_accounts SET monitoring_paused=0 WHERE status='valid' ${this.platformFilter('')}
       AND connection_id IN (SELECT id FROM connections WHERE status='valid' AND deleted_at IS NULL)`).run();
     this.setGlobalMonitor(true);
     this.ensureTimer();
@@ -104,7 +113,7 @@ export class Scheduler {
         JOIN social_accounts s ON s.account_id=a.account_id
         JOIN connections c ON c.id=s.connection_id
         WHERE a.status='enabled' AND a.name NOT LIKE '% (archived)' AND a.monitoring_started_at IS NOT NULL
-          AND s.status='valid' AND s.monitoring_paused=0 AND c.status='valid' AND c.monitoring_paused=0 AND c.deleted_at IS NULL
+          AND s.status='valid' ${this.platformFilter('s.')} AND s.monitoring_paused=0 AND c.status='valid' AND c.monitoring_paused=0 AND c.deleted_at IS NULL
         ORDER BY a.account_id, a.scope DESC, a.automation_id`).all() as MonitorRow[];
       // Media-specific automations keep the per-tick cadence; general ones are rate-limited below.
       for (const row of rows) {

@@ -2,12 +2,15 @@ export type ProviderCode = 'META';
 export type MetaLoginKind = 'instagram_login' | 'facebook_login';
 export type ConnectionStatus = 'unvalidated' | 'valid' | 'invalid' | 'disconnected';
 export type AccountStatus = 'unvalidated' | 'valid' | 'invalid' | 'disconnected';
+/** Which network an account belongs to. Absent on candidates and refs means 'instagram'. */
+export type AccountPlatform = 'instagram' | 'facebook';
 
 export type AccountRef = {
   accountId: string;
   connectionId: string;
   providerAccountId: string;
   username: string;
+  platform?: AccountPlatform;
 };
 
 export type ConnectionValidation = {
@@ -25,10 +28,13 @@ export type DiscoveredAccount = {
   displayName?: string;
   accountType?: string;
   relatedPageId?: string;
+  /** Omitted for Instagram accounts (default); 'facebook' only for Page candidates. */
+  platform?: AccountPlatform;
   capabilities: string[];
 };
 
-export type MediaType = 'IMAGE' | 'VIDEO' | 'CAROUSEL_ALBUM';
+/** 'POST' is a Facebook Page feed post (Instagram media keeps its three types). */
+export type MediaType = 'IMAGE' | 'VIDEO' | 'CAROUSEL_ALBUM' | 'POST';
 
 export type MediaItem = {
   mediaId: string;
@@ -48,6 +54,11 @@ export type ProviderComment = {
   parentId?: string;
   /** Opaque author id from `from.id` (validated shape only); used as the IGSID for read-only diagnostics. */
   authorId?: string;
+  /**
+   * Facebook only: Meta's `can_reply_privately`. `false` after a private reply was already made (by anyone) or when the
+   * comment cannot receive one. Undefined means "not reported" (Instagram, or an absent field), never "allowed".
+   */
+  canReplyPrivately?: boolean;
 };
 
 export type ProviderPage<T> = {
@@ -103,6 +114,8 @@ export type SendResult = {
   httpStatus?: number;
   metaCode?: number;
   metaSubcode?: number;
+  /** Facebook: Meta throttled the request (provably not processed), so the queue may retry it with backoff. */
+  rateLimited?: boolean;
   usageHeaders?: { appUsage?: string; pageUsage?: string; retryAfter?: string };
 };
 
