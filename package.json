@@ -5,6 +5,7 @@
   "license": "MIT",
   "private": true,
   "main": "desktop/main.cjs",
+  "desktopName": "social-desk.desktop",
   "engines": {
     "node": ">=24.21.0"
   },
