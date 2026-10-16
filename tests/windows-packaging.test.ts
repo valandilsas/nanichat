@@ -122,7 +122,8 @@ test('the expected SHA-256 is read from the exact file line of SHASUMS256.txt', 
 
 test('the payload keeps only runtime files: no build cache, traces, SWC, sharp or source maps', async () => {
   const { APP_ENTRIES, isExcludedFromNextBuild, isPrunedFromNodeModules } = await load<RulesModule>('packaging/windows/lib/payload-rules.mjs');
-  for (const required of ['.next', 'scripts', 'server.ts', 'src', 'next.config.mjs', 'package.json', 'package-lock.json']) {
+  // `public` carries the tutorial images served at /tutorial/…; without it the installed app would show broken images.
+  for (const required of ['.next', 'public', 'scripts', 'server.ts', 'src', 'next.config.mjs', 'package.json', 'package-lock.json']) {
     assert.ok(APP_ENTRIES.includes(required), `${required} is part of the app payload`);
   }
   for (const forbidden of ['data', 'tests', 'docs', '.git', 'node_modules', '.env', 'next.config.ts']) {

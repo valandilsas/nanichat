@@ -6,6 +6,7 @@ import { sep } from 'node:path';
 export const APP_ENTRIES = Object.freeze([
   '.next',
   'app',
+  'public',
   'scripts',
   'src',
   'server.ts',
