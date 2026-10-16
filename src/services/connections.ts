@@ -8,7 +8,7 @@ import type {
 } from '../core/domain.ts';
 import { assertPlatformEnabled } from './facebook-pages-rules.ts';
 import { normalizedAccountIdentity } from '../core/account-identity.ts';
-import { AccountAdoptionRequiredError, RepositoryConflictError } from '../core/errors.ts';
+import { AccountAdoptionRequiredError, RepositoryConflictError, toProviderRequestError } from '../core/errors.ts';
 import type { CredentialVault } from '../security/vault.ts';
 import {
   addDiscoveredAccount,
@@ -115,7 +115,7 @@ export class ConnectionService {
 
   async testConnection(id: string): Promise<ConnectionValidation> {
     getConnectionCredential(this.database, id);
-    const validation = await this.provider.validateConnection(id);
+    const validation = await providerCall(() => this.provider.validateConnection(id));
     const persisted = saveConnectionValidation(this.database, id, validation);
     if (persisted.status !== 'valid') this.discovered.delete(id);
     return persisted;
@@ -127,7 +127,7 @@ export class ConnectionService {
       throw new Error('Validate the connection before discovering accounts');
     }
 
-    const accounts = await this.provider.discoverAccounts(id);
+    const accounts = await providerCall(() => this.provider.discoverAccounts(id));
     const safeAccounts = accounts.map((account) => ({
       providerAccountId: account.providerAccountId,
       username: account.username,
@@ -172,7 +172,7 @@ export class ConnectionService {
     }
 
     const accountId = matches[0]?.account_id ?? randomUUID();
-    const derivedToken = await this.provider.credentialForSelectedAccount(id, verified);
+    const derivedToken = await providerCall(() => this.provider.credentialForSelectedAccount(id, verified));
     if (getConnectionSummary(this.database, id).status !== 'valid') {
       throw new Error('Connection changed during account validation; retry after revalidation');
     }
@@ -216,7 +216,7 @@ export class ConnectionService {
       throw new Error('Account is not currently validated');
     }
 
-    const page = await this.provider.listMedia(account);
+    const page = await providerCall(() => this.provider.listMedia(account));
     for (const media of page.items) {
       createMediaIfMissing(this.database, {
         accountId, mediaId: media.mediaId, permalink: media.permalink ?? null, publishedAt: media.publishedAt ?? null,
@@ -254,5 +254,14 @@ function parseCapabilities(json?: string): string[] {
     return Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string') : [];
   } catch {
     return [];
+  }
+}
+
+/** Runs a provider call and rethrows provider failures as secret-free ProviderRequestError; other errors pass through. */
+async function providerCall<T>(call: () => Promise<T>): Promise<T> {
+  try {
+    return await call();
+  } catch (error) {
+    throw toProviderRequestError(error) ?? error;
   }
 }

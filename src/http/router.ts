@@ -1,4 +1,4 @@
-import { AccountAdoptionRequiredError, PlatformFeatureNotSupportedError, PlatformNotSupportedError } from '../core/errors.ts';
+import { AccountAdoptionRequiredError, PlatformFeatureNotSupportedError, PlatformNotSupportedError, ProviderRequestError } from '../core/errors.ts';
 import { randomBytes } from 'node:crypto';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { DatabaseSync } from 'node:sqlite';
@@ -87,6 +87,15 @@ export function createApiHandler(deps: ApiDependencies) {
       }
       if (error instanceof ModerationAiServiceError || error instanceof LocalModelError) return send(response, error.status, { error: error.code });
       if (error instanceof QueueReadbackError) return send(response, error.status, { error: error.code });
+      if (error instanceof ProviderRequestError) {
+        // Allowlisted, numbers only: Meta's message text, trace ids and tokens never reach the browser.
+        return send(response, 502, {
+          error: error.code,
+          ...(error.httpStatus !== undefined ? { httpStatus: error.httpStatus } : {}),
+          ...(error.metaCode !== undefined ? { metaCode: error.metaCode } : {}),
+          ...(error.metaSubcode !== undefined ? { metaSubcode: error.metaSubcode } : {}),
+        });
+      }
       const status = error instanceof ApiError ? error.status : error instanceof TypeError ? 400 : 409;
       const code = error instanceof ApiError ? error.code
         : error instanceof AccountAdoptionRequiredError || error instanceof PlatformNotSupportedError || error instanceof PlatformFeatureNotSupportedError ? error.code

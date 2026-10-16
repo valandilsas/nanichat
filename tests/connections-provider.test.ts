@@ -467,7 +467,10 @@ test('Facebook discovery resolves linked Instagram identity using each Page toke
         id: 'page-1', name: 'Brand Page', access_token: 'private-page-token',
         tasks: ['MANAGE'], instagram_business_account: { id: '17841400000000000' },
       }] });
-      return Response.json({ id: '17841400000000000', username: 'brand', account_type: 'BUSINESS' });
+      if ((url.searchParams.get('fields') ?? '').includes('account_type')) {
+        return Response.json({ error: { message: '(#100) nonexisting field (account_type)', code: 100 } }, { status: 400 });
+      }
+      return Response.json({ id: '17841400000000000', username: 'brand' });
     };
     const provider = new MetaProvider(state.db, state.vault, fetcher);
     const validation = await provider.validateConnection(state.connectionId);
@@ -476,7 +479,8 @@ test('Facebook discovery resolves linked Instagram identity using each Page toke
     assert.deepEqual(discovered.map((account) => ({ providerAccountId: account.providerAccountId, username: account.username })), [
       { providerAccountId: '17841400000000000', username: 'brand' },
     ]);
-    assert.equal(discovered[0]!.accountType, 'BUSINESS');
+    assert.equal(discovered[0]!.accountType, undefined);
+    assert.equal(calls[2]!.url.searchParams.get('fields'), 'id,username');
     assert.equal(discovered[0]!.relatedPageId, 'page-1');
     assert.deepEqual(discovered[0]!.capabilities, ['identity_read', 'private_reply_unverified', 'page_task:MANAGE']);
     assert.equal(JSON.stringify(discovered).includes('private-page-token'), false);
@@ -549,5 +553,21 @@ test('vault startup authenticates account-derived Page tokens as well as connect
     assert.equal(listEncryptedCredentials(db).length, 2);
     db.prepare(`UPDATE social_accounts SET page_token_ciphertext='corrupted-ciphertext' WHERE account_id='account-1'`).run();
     assert.throws(() => createVault(directory, () => listEncryptedCredentials(db)), /key|credential|decrypt/i);
+  });
+});
+
+test('Instagram Login discovery still requests account_type on graph.instagram.com', async () => {
+  await withTempDb(async (directory) => {
+    const state = makeProviderDb(directory, 'instagram_login');
+    const calls: URL[] = [];
+    const fetcher: typeof fetch = async (input) => {
+      const url = new URL(String(input)); calls.push(url);
+      return Response.json({ id: '17841400000000000', username: 'brand', account_type: 'BUSINESS' });
+    };
+    const discovered = await new MetaProvider(state.db, state.vault, fetcher).discoverAccounts(state.connectionId);
+    assert.equal(calls[0]!.host, 'graph.instagram.com');
+    assert.equal(calls[0]!.searchParams.get('fields'), 'id,username,account_type');
+    assert.equal(discovered[0]!.accountType, 'BUSINESS');
+    state.db.close();
   });
 });

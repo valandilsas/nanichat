@@ -55,3 +55,39 @@ export class PlatformFeatureNotSupportedError extends Error {
     this.name = 'PlatformFeatureNotSupportedError';
   }
 }
+
+/**
+ * A provider (Meta) request failed. Carries ONLY a stable code and numeric diagnostics; Meta's message text, trace ids,
+ * URLs and tokens are never copied here (invariant 8), so it is safe to return to the browser.
+ */
+export class ProviderRequestError extends Error {
+  readonly httpStatus?: number;
+  readonly metaCode?: number;
+  readonly metaSubcode?: number;
+  constructor(readonly code: string, fields: { httpStatus?: number; metaCode?: number; metaSubcode?: number } = {}) {
+    super(code);
+    this.name = 'ProviderRequestError';
+    if (fields.httpStatus !== undefined) this.httpStatus = fields.httpStatus;
+    if (fields.metaCode !== undefined) this.metaCode = fields.metaCode;
+    if (fields.metaSubcode !== undefined) this.metaSubcode = fields.metaSubcode;
+  }
+}
+
+const SAFE_PROVIDER_CODE = /^meta_[a-z0-9_]{1,60}$/u;
+
+function safeInteger(value: unknown): number | undefined {
+  return typeof value === 'number' && Number.isInteger(value) && Math.abs(value) < 1e9 ? value : undefined;
+}
+
+/** Converts a provider failure (any error with a `meta_*` string code) into a secret-free error; undefined otherwise. */
+export function toProviderRequestError(error: unknown): ProviderRequestError | undefined {
+  if (error instanceof ProviderRequestError) return error;
+  if (!(error instanceof Error)) return undefined;
+  const source = error as Error & { code?: unknown; httpStatus?: unknown; metaCode?: unknown; metaSubcode?: unknown };
+  if (typeof source.code !== 'string' || !SAFE_PROVIDER_CODE.test(source.code)) return undefined;
+  return new ProviderRequestError(source.code, {
+    httpStatus: safeInteger(source.httpStatus),
+    metaCode: safeInteger(source.metaCode),
+    metaSubcode: safeInteger(source.metaSubcode),
+  });
+}

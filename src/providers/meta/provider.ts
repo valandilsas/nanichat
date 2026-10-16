@@ -113,11 +113,35 @@ export class MetaProvider implements SocialProvider {
         capabilities: ['identity_read', 'private_reply_unverified'],
       });
     } else {
-      const pages = await this.collectPages(
-        connection.graphVersion,
-        '/me/accounts?fields=id,name,access_token,tasks,instagram_business_account&limit=100',
-        token,
-      );
+      const pagesEnabled = facebookPagesAvailable(this.options.facebookPagesAvailable);
+      let pages: MetaObject[];
+      try {
+        pages = await this.collectPages(
+          connection.graphVersion,
+          '/me/accounts?fields=id,name,access_token,tasks,instagram_business_account&limit=100',
+          token,
+        );
+      } catch (error) {
+        // Without instagram_basic Meta rejects the instagram_business_account field (code 100). Only when Pages are
+        // enabled, retry exactly once without that field; Page candidates only. Any other error propagates.
+        if (!pagesEnabled || !(error instanceof MetaSafeError) || error.details?.code !== 100) throw error;
+        try {
+          pages = await this.collectPages(
+            connection.graphVersion,
+            '/me/accounts?fields=id,name,access_token,tasks&limit=100',
+            token,
+          );
+        } catch (retryError) {
+          // A still-failing listing with code 100 suggests the pasted token is a Page token (no /me/accounts edge).
+          // Any other error propagates unchanged.
+          if (!(retryError instanceof MetaSafeError) || retryError.details?.code !== 100) throw retryError;
+          const direct = await this.discoverDirectPage(connection.graphVersion, token);
+          accounts.set(direct.providerAccountId, direct);
+          pageTokens.set(direct.providerAccountId, token);
+          this.pageTokens.set(connectionId, pageTokens);
+          return [...accounts.values()];
+        }
+      }
       for (const page of pages) {
         const relatedPageId = string(page.id);
         const pageToken = string(page.access_token);
@@ -129,19 +153,28 @@ export class MetaProvider implements SocialProvider {
         const providerAccountId = string(linkedAccount?.id);
 
         if (providerAccountId) {
-          const details = await this.request(
-            'facebook_login',
-            connection.graphVersion,
-            `/${encodeURIComponent(providerAccountId)}?fields=id,username,account_type`,
-            pageToken,
-          );
-          const username = string(details.username);
-          if (username) {
+          let details: MetaObject | undefined;
+          try {
+            details = await this.request(
+              'facebook_login',
+              connection.graphVersion,
+              `/${encodeURIComponent(providerAccountId)}?fields=id,username`,
+              pageToken,
+            );
+          } catch (error) {
+            // `account_type` is NOT requested here: the IG User node on graph.facebook.com does not expose it (code 100);
+            // it exists only on the Instagram Login node. The lookup is optional when Pages are enabled: a
+            // permission/field-class rejection (e.g. missing instagram_basic) only drops this Page's Instagram
+            // candidate. No retry; any other error propagates.
+            const code = error instanceof MetaSafeError ? error.details?.code : undefined;
+            if (!pagesEnabled || (code !== 100 && code !== 10 && code !== 200)) throw error;
+          }
+          const username = string(details?.username);
+          if (details && username) {
             accounts.set(providerAccountId, {
               providerAccountId,
               username,
               displayName: string(page.name),
-              accountType: string(details.account_type),
               relatedPageId,
               capabilities: [
                 'identity_read',
@@ -154,7 +187,7 @@ export class MetaProvider implements SocialProvider {
         }
 
         // Dormant until tanda 2: the Page itself becomes a candidate (with or without a linked Instagram account).
-        if (facebookPagesAvailable(this.options.facebookPagesAvailable)) {
+        if (pagesEnabled) {
           const pageName = string(page.name) ?? relatedPageId;
           accounts.set(relatedPageId, {
             providerAccountId: relatedPageId,
@@ -172,6 +205,32 @@ export class MetaProvider implements SocialProvider {
 
     this.pageTokens.set(connectionId, pageTokens);
     return [...accounts.values()];
+  }
+
+  /** The pasted token is a Page token: `/me` is the Page itself. At most 2 requests; tasks are best effort. */
+  private async discoverDirectPage(version: string, token: string): Promise<DiscoveredAccount> {
+    const me = await this.request('facebook_login', version, '/me?fields=id,name', token);
+    const pageId = string(me.id);
+    const pageName = string(me.name);
+    if (!pageId || !pageName) throw new MetaSafeError('meta_invalid_identity');
+    let tasks: string[] = [];
+    try {
+      const response = await this.request('facebook_login', version, '/me?fields=tasks', token);
+      if (Array.isArray(response.tasks)) {
+        tasks = response.tasks.filter((task): task is string => typeof task === 'string').sort();
+      }
+    } catch {
+      // Tasks are informational; a rejection must not fail the discovery.
+    }
+    return {
+      providerAccountId: pageId,
+      username: pageName,
+      displayName: pageName,
+      accountType: FACEBOOK_PAGE_ACCOUNT_TYPE,
+      relatedPageId: pageId,
+      platform: 'facebook',
+      capabilities: ['identity_read', ...tasks.map((task) => `page_task:${task}`), 'page_token_direct'],
+    };
   }
 
   async credentialForSelectedAccount(

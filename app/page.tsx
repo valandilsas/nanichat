@@ -8,6 +8,7 @@ import { autoPickAutomation, describeQueuePayload, type PendingItem, type Pendin
 import { GENERAL_MEDIA_OPTION, automationTargetLabel, automationTargetPayload } from './automation-scope';
 import { deriveOnboarding, showOnboarding as shouldShowOnboarding } from './onboarding';
 import { formatElapsed, progressPercent, progressText, reasonLabel, summarizeScan, type ScanProgressDto } from './scan-summary';
+import { DISCOVERY_EMPTY_HINT, PROVIDER_MESSAGE_PREFIX, apiErrorFromBody, errorStateFor, errorToastLabel, validationFailureMessage } from './provider-errors';
 import { ADOPTION_PROMPT, ORPHAN_ADOPT_STEPS, ORPHAN_EMPTY_TEXT, isAdoptionRequired, orphanOrigin } from './orphaned-accounts';
 import { DISABLED_FEATURES, ENV_IMPORT_DISABLED_HINT, type Features, legacyPanelAccounts, parseFeatures } from './settings-features';
 import { INTERACTIVE_RETIRED_LABEL, directionLabel } from './interactive-buttons';
@@ -153,7 +154,7 @@ export default function HomePage() {
       ...(csrf ? { 'x-csrf-token': csrf } : {}),
     }, ...(body ? { body: JSON.stringify(body) } : {}) });
     const data = await response.json();
-    if (!response.ok) throw new Error(typeof data.error === 'string' ? data.error : 'request_failed');
+    if (!response.ok) throw apiErrorFromBody(response.status, data);
     return data;
   }, [csrf]);
 
@@ -222,7 +223,7 @@ export default function HomePage() {
     try { await operation(); setNotice(typeof message === 'function' ? message() : message); await refresh(); return true; }
     catch (cause) {
       if (cause instanceof Cancelled) return false;
-      setError(cause instanceof Error ? cause.message : 'operation_failed');
+      setError(errorStateFor(cause));
       return false;
     }
   }, [refresh]);
@@ -314,7 +315,7 @@ export default function HomePage() {
       </main>
     </div>
     <div className="toast-region">
-      <div role="alert" aria-live="assertive" aria-atomic="true"><ToastItem kind="error" content={error ? <><strong>La acción no se completó</strong><span>{safeErrorLabel(error)}</span></> : null} closeLabel="Cerrar aviso de error" onClose={() => setError('')} /></div>
+      <div role="alert" aria-live="assertive" aria-atomic="true"><ToastItem kind="error" content={error ? <><strong>La acción no se completó</strong><span>{errorToastLabel(error, safeErrorLabel)}</span></> : null} closeLabel="Cerrar aviso de error" onClose={() => setError('')} /></div>
       <div role="status" aria-live="polite" aria-atomic="true"><ToastItem kind="success" content={notice ? <span>{notice}</span> : null} closeLabel="Cerrar aviso" onClose={() => setNotice('')} /></div>
     </div>
     {dialog && <ConfirmDialog options={dialog} onResult={settleDialog} />}
@@ -479,7 +480,8 @@ function ConnectionsView({ connections, accounts, candidates, setCandidates, api
   const [name, setName] = useState(''); const [loginKind, setLoginKind] = useState('instagram_login'); const [appId, setAppId] = useState(''); const [version, setVersion] = useState('v26.0'); const [token, setToken] = useState('');
   const [editing, setEditing] = useState<Connection | null>(null); const [editName, setEditName] = useState(''); const [editAppId, setEditAppId] = useState(''); const [editVersion, setEditVersion] = useState(''); const [editToken, setEditToken] = useState('');
   async function create(event: FormEvent) { event.preventDefault(); const submittedToken = token; setToken(''); await act(async () => { await api('/api/connections', 'POST', { id: crypto.randomUUID(), name, loginKind, appId, graphVersion: version, accessToken: submittedToken }); setName(''); }, 'Conexión guardada; valide para descubrir cuentas.'); }
-  async function discover(id: string) { await act(async () => { await api(`/api/connections/${id}/test`, 'POST', {}); const result = await api(`/api/connections/${id}/discover`, 'POST', {}); setCandidates(result.candidates.map((candidate: any) => ({ ...candidate, connectionId: id }))); }, 'Validación y descubrimiento completados.'); }
+  const [discoveredEmpty, setDiscoveredEmpty] = useState(false);
+  async function discover(id: string) { await act(async () => { const tested = await api(`/api/connections/${id}/test`, 'POST', {}); if (tested.validation?.status !== 'valid') throw new Error(`${PROVIDER_MESSAGE_PREFIX}${validationFailureMessage(tested.validation?.safeErrorCode)}`); const result = await api(`/api/connections/${id}/discover`, 'POST', {}); setCandidates(result.candidates.map((candidate: any) => ({ ...candidate, connectionId: id }))); setDiscoveredEmpty(result.candidates.length === 0); }, 'Validación y descubrimiento completados.'); }
   async function update(event: FormEvent) { event.preventDefault(); if (!editing) return; const submittedToken = editToken; setEditToken(''); await act(async () => { await api(`/api/connections/${editing.id}`, 'PUT', { name: editName, appId: editAppId || null, graphVersion: editVersion, ...(submittedToken ? { accessToken: submittedToken } : {}) }); setEditing(null); }, 'Conexión actualizada. Vuelva a validar antes de monitorear.'); }
   const [pendingAdopt, setPendingAdopt] = useState<Candidate | null>(null);
   async function selectCandidate(candidate: Candidate, confirmed: boolean) {
@@ -536,7 +538,7 @@ function ConnectionsView({ connections, accounts, candidates, setCandidates, api
       </div>
       <aside className="conn-side">
         <section className="panel"><div className="panel-heading"><div><h3>Cuentas seleccionadas</h3><p className="muted">Los ID se obtienen de la respuesta oficial de Meta.</p></div></div>{accounts.length ? <div className="avatar-tiles">{accounts.map((account) => <div className="list-row avatar-tile" key={account.accountId}><RingAvatar username={account.username} /><div className="list-row-text"><strong>{accountHandle(account)}</strong><span className="muted">{platformBadge(account, accounts) ? `${platformBadge(account, accounts)} · ` : ''}{account.status === 'valid' ? 'Validada' : account.status} · {account.accountId}</span></div></div>)}</div> : <p className="empty-inline">Aún no hay cuentas seleccionadas. Pruebe una conexión y pulse «Seleccionar» en la cuenta que desea usar.</p>}</section>
-        <section className="panel"><h3>Cuentas descubiertas</h3>{candidates.length ? <div className="avatar-tiles">{candidates.map((candidate) => <div className="list-row avatar-tile" key={candidate.providerAccountId}><RingAvatar username={candidate.username}/><div className="list-row-text"><strong>{accountHandle(candidate)}</strong><span className="muted">{platformBadge(candidate, candidates) ? `${platformBadge(candidate, candidates)} · ` : ''}ID de proveedor: {candidate.providerAccountId}</span></div><button className="btn-main small" onClick={() => void selectCandidate(candidate, false)}>Seleccionar</button></div>)}</div> : <p className="empty-inline">Pulse «Probar y descubrir» en una conexión para listar las cuentas disponibles.</p>}{pendingAdopt && <div className="adopt-notice" role="alertdialog" aria-label="Confirmar adopción de cuenta"><p><strong>{accountHandle(pendingAdopt)}</strong>: {ADOPTION_PROMPT}</p><div className="row-actions"><button className="btn-main small" onClick={() => void selectCandidate(pendingAdopt, true)}>Adoptar</button><button className="btn small" onClick={() => setPendingAdopt(null)}>Cancelar</button></div></div>}</section>
+        <section className="panel"><h3>Cuentas descubiertas</h3>{candidates.length ? <div className="avatar-tiles">{candidates.map((candidate) => <div className="list-row avatar-tile" key={candidate.providerAccountId}><RingAvatar username={candidate.username}/><div className="list-row-text"><strong>{accountHandle(candidate)}</strong><span className="muted">{platformBadge(candidate, candidates) ? `${platformBadge(candidate, candidates)} · ` : ''}ID de proveedor: {candidate.providerAccountId}</span></div><button className="btn-main small" onClick={() => void selectCandidate(candidate, false)}>Seleccionar</button></div>)}</div> : <p className="empty-inline">{discoveredEmpty ? DISCOVERY_EMPTY_HINT : 'Pulse «Probar y descubrir» en una conexión para listar las cuentas disponibles.'}</p>}{pendingAdopt && <div className="adopt-notice" role="alertdialog" aria-label="Confirmar adopción de cuenta"><p><strong>{accountHandle(pendingAdopt)}</strong>: {ADOPTION_PROMPT}</p><div className="row-actions"><button className="btn-main small" onClick={() => void selectCandidate(pendingAdopt, true)}>Adoptar</button><button className="btn small" onClick={() => setPendingAdopt(null)}>Cancelar</button></div></div>}</section>
         {legacyAccounts.length > 0 && <section className="panel"><h3>Retención heredada</h3><p className="muted">{features.legacyInterlock ? 'Una cuenta usada antes con otra herramienta puede tener un bloqueo o historial de rechazos previos. La aplicación nunca borra ni modifica esos archivos.' : 'Esta cuenta conserva una retención de una configuración heredada anterior. Revísela y reconózcala para liberarla.'}</p><div className="avatar-tiles">{legacyAccounts.map((account) => <div className="list-row avatar-tile" key={`legacy-${account.accountId}`}><RingAvatar username={account.username} /><div className="list-row-text"><strong>@{account.username}</strong></div><button className="btn small" onClick={() => void acknowledgeLegacy(account)}>Revisar estado y reconocer</button></div>)}</div></section>}
       </aside>
     </div>

@@ -47,6 +47,7 @@ En esta guía el token se representa como `TU_TOKEN`. **Nunca lo pegues en un ch
 
 | Permiso | Nota |
 | --- | --- |
+| `instagram_basic` | Solo si además quieres encontrar la cuenta de Instagram vinculada a la Página (permite leer el nodo de Instagram). NaniChat consulta esa cuenta pidiendo solo `id,username`: el campo `account_type` no existe en `graph.facebook.com` y pedirlo hacía fallar el descubrimiento (error corregido). Sin él, NaniChat muestra solo la Página: si Meta rechaza el listado con el campo de Instagram (error 100), la aplicación repite una sola vez la consulta sin ese campo. Si el token no tiene este permiso y Meta rechaza la consulta de la cuenta de Instagram vinculada (error 100, 10 o 200), NaniChat omite solo esa cuenta de Instagram y ofrece igualmente la Página. Comportamiento por verificar con una Página real. |
 | `pages_manage_engagement` | Reservado para la futura respuesta pública. Hoy no se usa. |
 | `pages_manage_metadata` | No se usa. |
 | `business_management` | No se usa. Solo podría hacer falta si tu rol en la Página se otorgó mediante un Business Manager. |
@@ -58,9 +59,15 @@ En esta guía el token se representa como `TU_TOKEN`. **Nunca lo pegues en un ch
 1. Abre el [Explorador de la API Graph](https://developers.facebook.com/tools/explorer/) con tu usuario de Facebook.
 2. En el selector de **Aplicación de Meta**, elige tu app.
 3. En **Permisos**, añade los cuatro obligatorios: `pages_show_list`, `pages_read_engagement`, `pages_read_user_content` y `pages_messaging`.
-4. Pulsa **Generate Access Token** (Generar token de acceso).
-5. En el cuadro de diálogo de Facebook, **acepta los permisos y elige la Página** (o las Páginas) que quieres autorizar. Si no marcas la Página, no aparecerá al descubrir cuentas.
-6. Copia el token del campo de token de acceso. **No lo pegues en ningún chat.**
+4. Revisa el selector **Usuario o página** y elige **Token del usuario** (obtener token de acceso de usuario). Si queda seleccionada una Página, el token que obtengas será el de esa Página.
+5. Pulsa **Generate Access Token** (Generar token de acceso).
+6. En el cuadro de diálogo de Facebook, **acepta los permisos y elige la Página** (o las Páginas) que quieres autorizar. Si no marcas la Página, no aparecerá al descubrir cuentas.
+7. Copia el token del campo de token de acceso. **No lo pegues en ningún chat.**
+
+**Dos tipos de token válidos.** NaniChat acepta **cualquiera** de estos:
+
+- **Token de usuario** (recomendado): NaniChat encuentra por sí mismo todas tus Páginas con `/me/accounts`.
+- **Token de una Página** directamente: si `/me/accounts` falla con el código 100, NaniChat asume que pegaste el token de una Página y la conecta usándolo; solo aparece esa Página (sin cuentas de Instagram vinculadas). El token de Página que da el Explorador es de **corta duración**, salvo que lo canjees por uno largo. *Este modo está **por verificar con una Página real**.*
 
 Comprobación opcional en el propio Explorador: la consulta `me/accounts` debe devolver tu Página. Social Desk hace esa misma consulta por ti en «Probar y descubrir».
 
@@ -140,3 +147,7 @@ Empecemos: pregúntame primero si ya tengo la app de Meta creada y si tengo cont
 - Respuestas privadas (Messenger Platform): busca «Private Replies» en [developers.facebook.com/docs/messenger-platform](https://developers.facebook.com/docs/messenger-platform)
 - Permisos y funciones de las apps de Meta: [developers.facebook.com/docs/permissions](https://developers.facebook.com/docs/permissions)
 - Tokens de acceso de larga duración: [developers.facebook.com/docs/facebook-login/guides/access-tokens/get-long-lived](https://developers.facebook.com/docs/facebook-login/guides/access-tokens/get-long-lived)
+
+## Cambiar de tipo de token
+
+No edites una conexión para cambiar entre un token de Página y uno de usuario: la validación falla con «Este token pertenece a otra identidad». Elimina la conexión y crea una nueva con el token correcto.

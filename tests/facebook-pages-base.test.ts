@@ -164,17 +164,27 @@ test('the scheduler never starts or ticks a facebook account', async () => {
 
 // ---------------------------------------------------------------- T3: discovery
 
+/** Like real Meta: the IG User node on graph.facebook.com has no `account_type` field (code 100 if requested). */
+function strictFacebookNode(url: URL): Response | undefined {
+  if (url.host === 'graph.facebook.com' && (url.searchParams.get('fields') ?? '').split(',').includes('account_type')) {
+    return Response.json({ error: { message: '(#100) Tried accessing nonexisting field (account_type)', type: 'OAuthException', code: 100 } }, { status: 400 });
+  }
+  return undefined;
+}
+
 function discoveryFetcher(calls: URL[]): typeof fetch {
   return async (input) => {
     const url = new URL(String(input));
     calls.push(url);
+    const strict = strictFacebookNode(url);
+    if (strict) return strict;
     if (url.pathname.endsWith('/me/accounts')) {
       return Response.json({ data: [
         { id: 'page-1', name: 'Linked Page', access_token: 'token-one', tasks: ['MODERATE', 'MANAGE'], instagram_business_account: { id: 'ig-1' } },
         { id: 'page-2', name: 'Plain Page', access_token: 'token-two', tasks: ['MANAGE'] },
       ] });
     }
-    return Response.json({ id: 'ig-1', username: 'linked_ig', account_type: 'BUSINESS' });
+    return Response.json({ id: 'ig-1', username: 'linked_ig' });
   };
 }
 
@@ -186,6 +196,35 @@ async function discoveryState(directory: string, db: ReturnType<typeof openDatab
   });
   return vault;
 }
+
+test('Instagram lookup via Facebook Login requests only id,username (never account_type)', async () => {
+  await withEnv(async (directory, db) => {
+    const vault = await discoveryState(directory, db);
+    const calls: URL[] = [];
+    await new MetaProvider(db, vault, discoveryFetcher(calls)).discoverAccounts('fb');
+    const lookup = calls.find((u) => u.pathname === '/v26.0/ig-1')!;
+    assert.equal(lookup.searchParams.get('fields'), 'id,username');
+    assert.equal(lookup.href.includes('account_type'), false);
+  });
+});
+
+test('behavior FIX: with Pages disabled, the Instagram candidate via Facebook Login is now returned against a strict Meta mock', async () => {
+  await withEnv(async (directory, db) => {
+    const vault = await discoveryState(directory, db);
+    const found = await new MetaProvider(db, vault, discoveryFetcher([])).discoverAccounts('fb');
+    assert.deepEqual(found.map((a) => a.providerAccountId), ['ig-1']);
+    assert.equal(found[0]!.accountType, undefined);
+  });
+});
+
+test('with Pages enabled, both the Instagram candidate and the Page candidate are returned against a strict Meta mock', async () => {
+  await withEnv(async (directory, db) => {
+    const vault = await discoveryState(directory, db);
+    const found = await new MetaProvider(db, vault, discoveryFetcher([]), { facebookPagesAvailable: true }).discoverAccounts('fb');
+    assert.deepEqual(found.map((a) => [a.providerAccountId, a.platform ?? 'instagram']), [['ig-1', 'instagram'], ['page-1', 'facebook'], ['page-2', 'facebook']]);
+    assert.equal(found[0]!.accountType, undefined);
+  });
+});
 
 test('with the switch off, facebook_login discovery is unchanged: only linked Instagram accounts, no platform field', async () => {
   await withEnv(async (directory, db) => {
@@ -218,6 +257,203 @@ test('with the switch on, Pages are also discovered (with and without a linked I
     assert.equal(await provider.credentialForSelectedAccount('fb', page), 'token-one');
     assert.equal(await provider.credentialForSelectedAccount('fb', found[2]!), 'token-two');
     assert.deepEqual(calls.map((u) => u.pathname), ['/v26.0/me/accounts', '/v26.0/ig-1']);
+  });
+});
+
+// ---------------------------------------------------------------- discovery fallback without instagram_basic
+
+function fallbackFetcher(calls: URL[], headers: Array<Record<string, string>>, firstStatus: number, firstCode: number): typeof fetch {
+  let accountsCalls = 0;
+  return async (input, init) => {
+    const url = new URL(String(input));
+    calls.push(url);
+    headers.push({ ...((init?.headers ?? {}) as Record<string, string>) });
+    const strict = strictFacebookNode(url);
+    if (strict) return strict;
+    if (url.pathname.endsWith('/me/accounts')) {
+      accountsCalls += 1;
+      if (accountsCalls === 1 && firstStatus !== 200) {
+        return Response.json({ error: { message: 'Invalid parameter', type: 'OAuthException', code: firstCode } }, { status: firstStatus });
+      }
+      const withIg = url.searchParams.get('fields')?.includes('instagram_business_account');
+      return Response.json({ data: [
+        { id: 'page-1', name: 'Linked Page', access_token: 'token-one', tasks: ['MANAGE'], ...(withIg ? { instagram_business_account: { id: 'ig-1' } } : {}) },
+      ] });
+    }
+    return Response.json({ id: 'ig-1', username: 'linked_ig' });
+  };
+}
+
+test('enabled + code 100 on the listing: retries once without instagram_business_account and returns Pages only', async () => {
+  await withEnv(async (directory, db) => {
+    const vault = await discoveryState(directory, db);
+    const calls: URL[] = [];
+    const headers: Array<Record<string, string>> = [];
+    const provider = new MetaProvider(db, vault, fallbackFetcher(calls, headers, 400, 100), { facebookPagesAvailable: true });
+    const found = await provider.discoverAccounts('fb');
+    assert.deepEqual(found.map((a) => [a.providerAccountId, a.platform ?? 'instagram']), [['page-1', 'facebook']]);
+    assert.deepEqual(calls.map((u) => u.pathname), ['/v26.0/me/accounts', '/v26.0/me/accounts']);
+    assert.equal(calls[0]!.searchParams.get('fields')!.includes('instagram_business_account'), true);
+    assert.equal(calls[1]!.searchParams.get('fields'), 'id,name,access_token,tasks');
+    assert.equal(calls[1]!.searchParams.get('limit'), '100');
+    for (const call of calls) assert.equal(call.href.includes('user-token'), false);
+    for (const header of headers) assert.equal(header.authorization, 'Bearer user-token');
+    assert.equal(await provider.credentialForSelectedAccount('fb', found[0]!), 'token-one');
+  });
+});
+
+test('enabled + listing OK: no fallback, Instagram and Page candidates as before', async () => {
+  await withEnv(async (directory, db) => {
+    const vault = await discoveryState(directory, db);
+    const calls: URL[] = [];
+    const provider = new MetaProvider(db, vault, fallbackFetcher(calls, [], 200, 0), { facebookPagesAvailable: true });
+    const found = await provider.discoverAccounts('fb');
+    assert.deepEqual(found.map((a) => a.providerAccountId), ['ig-1', 'page-1']);
+    assert.deepEqual(calls.map((u) => u.pathname), ['/v26.0/me/accounts', '/v26.0/ig-1']);
+  });
+});
+
+test('enabled + other Meta codes (190, 10, 200) propagate without a retry', async () => {
+  for (const code of [190, 10, 200]) {
+    await withEnv(async (directory, db) => {
+      const vault = await discoveryState(directory, db);
+      const calls: URL[] = [];
+      const provider = new MetaProvider(db, vault, fallbackFetcher(calls, [], code === 190 ? 401 : 403, code), { facebookPagesAvailable: true });
+      await assert.rejects(provider.discoverAccounts('fb'));
+      assert.equal(calls.length, 1);
+    });
+  }
+});
+
+test('disabled + code 100: error propagates, no retry, request unchanged', async () => {
+  await withEnv(async (directory, db) => {
+    const vault = await discoveryState(directory, db);
+    const calls: URL[] = [];
+    const provider = new MetaProvider(db, vault, fallbackFetcher(calls, [], 400, 100));
+    await assert.rejects(provider.discoverAccounts('fb'));
+    assert.equal(calls.length, 1);
+    assert.equal(calls[0]!.searchParams.get('fields'), 'id,name,access_token,tasks,instagram_business_account');
+  });
+});
+
+test('enabled + code 100 on both attempts: the second error propagates (exactly one fallback)', async () => {
+  await withEnv(async (directory, db) => {
+    const vault = await discoveryState(directory, db);
+    const calls: URL[] = [];
+    const failing: typeof fetch = async (input) => {
+      calls.push(new URL(String(input)));
+      return Response.json({ error: { message: 'bad', code: 100 } }, { status: 400 });
+    };
+    const provider = new MetaProvider(db, vault, failing, { facebookPagesAvailable: true });
+    await assert.rejects(provider.discoverAccounts('fb'));
+    // listing + fallback listing + the Page-token probe (/me); nothing more.
+    assert.equal(calls.length, 3);
+    assert.deepEqual(calls.map((u) => u.pathname), ['/v26.0/me/accounts', '/v26.0/me/accounts', '/v26.0/me']);
+  });
+});
+
+// ---------------------------------------------------------------- pasted Page token (no /me/accounts)
+
+function pageTokenFetcher(
+  calls: URL[], headers: Array<Record<string, string>>,
+  options: { meBody?: unknown; tasksFails?: boolean; secondListingCode?: number } = {},
+): typeof fetch {
+  let listings = 0;
+  return async (input, init) => {
+    const url = new URL(String(input));
+    calls.push(url);
+    headers.push({ ...((init?.headers ?? {}) as Record<string, string>) });
+    if (url.pathname.endsWith('/me/accounts')) {
+      listings += 1;
+      const code = listings === 2 ? (options.secondListingCode ?? 100) : 100;
+      return Response.json({ error: { message: 'Unknown path components: /accounts', type: 'GraphMethodException', code } }, { status: code === 190 ? 401 : 400 });
+    }
+    if (url.pathname.endsWith('/me')) {
+      if (url.searchParams.get('fields') === 'tasks') {
+        return options.tasksFails
+          ? Response.json({ error: { message: 'nope', code: 100 } }, { status: 400 })
+          : Response.json({ tasks: ['MODERATE', 'MANAGE'] });
+      }
+      return Response.json(options.meBody ?? { id: 'page-9', name: 'Direct Page' });
+    }
+    return Response.json({ data: [] });
+  };
+}
+
+test('enabled + listing 100 twice: the pasted token is treated as a Page token (one Page candidate, token kept)', async () => {
+  await withEnv(async (directory, db) => {
+    const vault = createVault(directory, () => listEncryptedCredentials(db));
+    const calls: URL[] = [];
+    const headers: Array<Record<string, string>> = [];
+    const provider = new MetaProvider(db, vault, pageTokenFetcher(calls, headers), { facebookPagesAvailable: true });
+    const service = new ConnectionService(db, vault, provider, { facebookPagesAvailable: true });
+    await service.create({ id: 'fb', name: 'FB', loginKind: 'facebook_login', graphVersion: 'v26.0', accessToken: 'pasted-page-token' });
+    await service.testConnection('fb');
+    calls.length = 0;
+    headers.length = 0;
+    const found = await service.discoverAccounts('fb');
+    assert.equal(found.length, 1);
+    const page = found[0]!;
+    assert.deepEqual([page.providerAccountId, page.username, page.displayName, page.accountType, page.relatedPageId, page.platform],
+      ['page-9', 'Direct Page', 'Direct Page', 'PAGE', 'page-9', 'facebook']);
+    assert.deepEqual(page.capabilities, ['identity_read', 'page_task:MANAGE', 'page_task:MODERATE', 'page_token_direct']);
+    assert.deepEqual(calls.map((u) => `${u.pathname}?${u.searchParams.get('fields')}`), [
+      '/v26.0/me/accounts?id,name,access_token,tasks,instagram_business_account',
+      '/v26.0/me/accounts?id,name,access_token,tasks',
+      '/v26.0/me?id,name',
+      '/v26.0/me?tasks',
+    ]);
+    for (const call of calls) assert.equal(call.href.includes('pasted-page-token'), false);
+    for (const header of headers) assert.equal(header.authorization, 'Bearer pasted-page-token');
+    assert.equal(JSON.stringify(found).includes('pasted-page-token'), false);
+
+    const selected = await service.selectAccount('fb', page);
+    assert.equal(selected.platform, 'facebook');
+    const account: AccountRef = { accountId: selected.accountId, connectionId: 'fb', providerAccountId: 'page-9', username: 'Direct Page' };
+    headers.length = 0;
+    await provider.listMedia(account);
+    assert.ok(headers.length >= 1);
+    for (const header of headers) assert.equal(header.authorization, 'Bearer pasted-page-token');
+  });
+});
+
+test('Page-token mode: a rejected tasks request still returns the candidate, without tasks', async () => {
+  await withEnv(async (directory, db) => {
+    const vault = await discoveryState(directory, db);
+    const provider = new MetaProvider(db, vault, pageTokenFetcher([], [], { tasksFails: true }), { facebookPagesAvailable: true });
+    const found = await provider.discoverAccounts('fb');
+    assert.equal(found.length, 1);
+    assert.deepEqual(found[0]!.capabilities, ['identity_read', 'page_token_direct']);
+  });
+});
+
+test('Page-token mode: /me without id or name fails with meta_invalid_identity', async () => {
+  for (const meBody of [{ name: 'No Id' }, { id: 'page-9' }]) {
+    await withEnv(async (directory, db) => {
+      const vault = await discoveryState(directory, db);
+      const provider = new MetaProvider(db, vault, pageTokenFetcher([], [], { meBody }), { facebookPagesAvailable: true });
+      await assert.rejects(provider.discoverAccounts('fb'), (error: unknown) => error instanceof Error && error.message.includes('meta_invalid_identity'));
+    });
+  }
+});
+
+test('Page-token mode: a non-100 error on the fallback listing propagates and /me is never called', async () => {
+  await withEnv(async (directory, db) => {
+    const vault = await discoveryState(directory, db);
+    const calls: URL[] = [];
+    const provider = new MetaProvider(db, vault, pageTokenFetcher(calls, [], { secondListingCode: 190 }), { facebookPagesAvailable: true });
+    await assert.rejects(provider.discoverAccounts('fb'));
+    assert.deepEqual(calls.map((u) => u.pathname), ['/v26.0/me/accounts', '/v26.0/me/accounts']);
+  });
+});
+
+test('Page-token mode is off with the switch off: code 100 propagates with a single call', async () => {
+  await withEnv(async (directory, db) => {
+    const vault = await discoveryState(directory, db);
+    const calls: URL[] = [];
+    const provider = new MetaProvider(db, vault, pageTokenFetcher(calls, []));
+    await assert.rejects(provider.discoverAccounts('fb'));
+    assert.equal(calls.length, 1);
   });
 });
 
@@ -315,5 +551,91 @@ test('GET /api/accounts exposes platform and nothing secret', async (context) =>
     const accounts = JSON.parse(body).accounts as Array<{ accountId: string; platform: string }>;
     assert.deepEqual(Object.fromEntries(accounts.map((a) => [a.accountId, a.platform])), { ig: 'instagram', 'page-account': 'facebook' });
     assert.equal(body.includes('page-token'), false);
+  });
+});
+
+// ---------------------------------------------------------------- discovery: optional Instagram lookup
+
+function igLookupFetcher(calls: URL[], igResponse: () => Response, pages?: unknown[]): typeof fetch {
+  return async (input) => {
+    const url = new URL(String(input));
+    calls.push(url);
+    const strict = strictFacebookNode(url);
+    if (strict) return strict;
+    if (url.pathname.endsWith('/me/accounts')) {
+      return Response.json({ data: pages ?? [
+        { id: 'page-1', name: 'Linked Page', access_token: 'token-one', tasks: ['MANAGE'], instagram_business_account: { id: 'ig-1' } },
+      ] });
+    }
+    return igResponse();
+  };
+}
+
+const metaError = (status: number, code: number) => () =>
+  Response.json({ error: { message: 'nope', type: 'OAuthException', code, error_subcode: 33 } }, { status });
+
+test('enabled + permission-class error (100, 10, 200) on the Instagram lookup: only the Page candidate is returned', async () => {
+  for (const code of [100, 10, 200]) {
+    await withEnv(async (directory, db) => {
+      const vault = await discoveryState(directory, db);
+      const calls: URL[] = [];
+      const provider = new MetaProvider(db, vault, igLookupFetcher(calls, metaError(400, code)), { facebookPagesAvailable: true });
+      const found = await provider.discoverAccounts('fb');
+      assert.deepEqual(found.map((a) => [a.providerAccountId, a.platform]), [['page-1', 'facebook']]);
+      assert.equal(calls.filter((u) => u.pathname === '/v26.0/ig-1').length, 1);
+      assert.equal(await provider.credentialForSelectedAccount('fb', found[0]!), 'token-one');
+    });
+  }
+});
+
+test('enabled + 190 or 5xx on the Instagram lookup: the error propagates', async () => {
+  for (const [status, code] of [[401, 190], [500, 1], [503, 2]] as const) {
+    await withEnv(async (directory, db) => {
+      const vault = await discoveryState(directory, db);
+      const provider = new MetaProvider(db, vault, igLookupFetcher([], metaError(status, code)), { facebookPagesAvailable: true });
+      await assert.rejects(provider.discoverAccounts('fb'));
+    });
+  }
+});
+
+test('enabled + an Instagram lookup without a username is still skipped silently (unchanged)', async () => {
+  await withEnv(async (directory, db) => {
+    const vault = await discoveryState(directory, db);
+    const provider = new MetaProvider(db, vault, igLookupFetcher([], () => Response.json({ id: 'ig-1' })), { facebookPagesAvailable: true });
+    const found = await provider.discoverAccounts('fb');
+    assert.deepEqual(found.map((a) => a.providerAccountId), ['page-1']);
+  });
+});
+
+test('switch off + code 100 on the Instagram lookup: the error propagates and no Page candidate appears', async () => {
+  await withEnv(async (directory, db) => {
+    const vault = await discoveryState(directory, db);
+    const calls: URL[] = [];
+    const provider = new MetaProvider(db, vault, igLookupFetcher(calls, metaError(400, 100)));
+    await assert.rejects(provider.discoverAccounts('fb'));
+    assert.deepEqual(calls.map((u) => u.pathname), ['/v26.0/me/accounts', '/v26.0/ig-1']);
+  });
+});
+
+test('enabled + Instagram lookup OK: Instagram first, then the Page (unchanged)', async () => {
+  await withEnv(async (directory, db) => {
+    const vault = await discoveryState(directory, db);
+    const provider = new MetaProvider(db, vault, igLookupFetcher([], () => Response.json({ id: 'ig-1', username: 'linked_ig' })), { facebookPagesAvailable: true });
+    const found = await provider.discoverAccounts('fb');
+    assert.deepEqual(found.map((a) => a.providerAccountId), ['ig-1', 'page-1']);
+  });
+});
+
+test('enabled + first Page fails its Instagram lookup (100), second has none: both Pages are returned', async () => {
+  await withEnv(async (directory, db) => {
+    const vault = await discoveryState(directory, db);
+    const calls: URL[] = [];
+    const pages = [
+      { id: 'page-1', name: 'Linked Page', access_token: 'token-one', tasks: ['MANAGE'], instagram_business_account: { id: 'ig-1' } },
+      { id: 'page-2', name: 'Plain Page', access_token: 'token-two', tasks: ['MANAGE'] },
+    ];
+    const provider = new MetaProvider(db, vault, igLookupFetcher(calls, metaError(400, 100), pages), { facebookPagesAvailable: true });
+    const found = await provider.discoverAccounts('fb');
+    assert.deepEqual(found.map((a) => [a.providerAccountId, a.platform]), [['page-1', 'facebook'], ['page-2', 'facebook']]);
   });
 });
