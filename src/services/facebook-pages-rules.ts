@@ -1,4 +1,4 @@
-import type { AccountPlatform } from '../core/domain.ts';
+import { type AccountPlatform } from '../core/domain.ts';
 import { PlatformNotSupportedError } from '../core/errors.ts';
 
 /**
@@ -39,9 +39,14 @@ export const FACEBOOK_MESSAGE_TEXT_MAX = 2000;
 
 /**
  * Facebook buttons are NOT verified, so URL buttons travel as plain text lines (`<title>: <https url>`) after the text.
- * Returns undefined when the result would exceed the Messenger text limit.
+ * When the payload says the text already carries the composed button links (`linksInText`), keep it as-is so both
+ * platforms send the same composed text without duplicating links; otherwise the historic lines are appended unchanged.
+ * Returns undefined when the result would exceed the Messenger limit.
  */
-export function facebookMessageText(text: string, buttons: ReadonlyArray<{ title: string; url: string }>): string | undefined {
-  const full = [text, ...buttons.map((button) => `${button.title}: ${button.url}`)].join('\n');
+export function facebookMessageText(text: string, buttons: ReadonlyArray<{ title: string; url: string }>, linksInText = false): string | undefined {
+  const full = linksInText
+    ? text
+    : [text, ...buttons.map((button) => `${button.title}: ${button.url}`)].join('\n');
   return full.length <= FACEBOOK_MESSAGE_TEXT_MAX ? full : undefined;
 }
+

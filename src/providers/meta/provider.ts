@@ -650,7 +650,7 @@ export class MetaProvider implements SocialProvider {
     if (!validPrivateReplyPayload(payload) || payload.postbackButtons !== undefined || payload.quickReplies !== undefined) {
       return { outcome: 'definitive_rejection', safeErrorCode: 'invalid_reply_payload' };
     }
-    const text = facebookMessageText(payload.text, payload.buttons);
+    const text = facebookMessageText(payload.text, payload.buttons, payload.linksInText === true);
     if (text === undefined) return { outcome: 'definitive_rejection', safeErrorCode: 'invalid_reply_payload' };
     try {
       this.assertCommentBelongsToAccount(account.accountId, commentId);

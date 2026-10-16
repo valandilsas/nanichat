@@ -106,12 +106,12 @@ export class QueueService {
 
   async enqueueReviewed(accountId: string, automationId: string, reviewedCommentIds: string[]): Promise<string[]> {
     if (!reviewedCommentIds.length) return [];
-    const automation = this.database.prepare(`SELECT media_id, scope, status, real_enabled, match_mode, reply_text, buttons_json, version,
-      public_reply_enabled, public_reply_variants_json,
+    const automation = this.database.prepare(`SELECT media_id, scope, status, real_enabled, match_mode, reply_text, buttons_json,
+      button_links_in_text, version, public_reply_enabled, public_reply_variants_json,
       follow_gate_enabled, follow_gate_message, follow_gate_button_title, resource_attachment_kind, resource_attachment_url
       FROM automations WHERE account_id = ? AND automation_id = ?`).get(accountId, automationId) as {
       media_id: string | null; scope: 'media' | 'account'; status: string; real_enabled: number; match_mode: 'exact' | 'contains';
-      reply_text: string; buttons_json: string; version: number; public_reply_enabled: number; public_reply_variants_json: string;
+      reply_text: string; buttons_json: string; button_links_in_text: number; version: number; public_reply_enabled: number; public_reply_variants_json: string;
       follow_gate_enabled: number; follow_gate_message: string; follow_gate_button_title: string;
       resource_attachment_kind: string; resource_attachment_url: string;
     } | undefined;
@@ -179,15 +179,16 @@ export class QueueService {
         account: account.username, media: mediaLabel,
       };
       const urlButtons = JSON.parse(automation.buttons_json) as Array<{ title: string; url: string }>;
+      const buttonLinksInText = automation.button_links_in_text === 1;
       const followGate = storedFollowGateConfig(automation.follow_gate_enabled, automation.follow_gate_message, automation.follow_gate_button_title);
       // Follow gate: the first message is the gate (one postback button); the resource (reply text + URL buttons, plus the
       // optional attachment) is rendered now and frozen in the payload, so later edits never alter it. Without the gate
       // the payload is the historic one. A legacy interactive_mode (retired experiment) is ignored: no dead button is sent.
       // While the follow gate is retired (FOLLOW_GATE_AVAILABLE), a stored gate/attachment is ignored the same way.
       const payload = followGate.enabled && this.followGateAvailable()
-        ? renderFollowGatePayload(followGate, variables, { replyText: automation.reply_text, buttons: urlButtons }, automationId,
+        ? renderFollowGatePayload(followGate, variables, { replyText: automation.reply_text, buttons: urlButtons, buttonLinksInText }, automationId,
           storedResourceAttachment(automation.resource_attachment_kind, automation.resource_attachment_url))
-        : renderReply(automation.reply_text, variables, urlButtons);
+        : renderReply(automation.reply_text, variables, urlButtons, undefined, buttonLinksInText);
       const now = new Date().toISOString();
       // Simulated items keep the would-be public reply as an inert preview (WOULD_REPLY_PUBLIC); it is never posted.
       const preview = simulated && !alreadyMessaged && automation.public_reply_enabled === 1

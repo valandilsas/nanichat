@@ -1,4 +1,8 @@
-import type { FollowGateSnapshot, InteractiveMode, ProviderComment, PrivateReplyPayload, ResourceAttachment } from '../core/domain.ts';
+import {
+  type FollowGateSnapshot, type InteractiveMode, type PrivateReplyPayload, type ProviderComment, type ResourceAttachment,
+  composeButtonLinksText,
+} from '../core/domain.ts';
+export { composeButtonLinksText };
 import { randomUUID } from 'node:crypto';
 import type { DatabaseSync } from 'node:sqlite';
 import { DomainRejectionError } from '../core/errors.ts';
@@ -199,6 +203,13 @@ export function storedFollowGateConfig(enabled: unknown, message: unknown, butto
   };
 }
 
+export const BUTTON_LINKS_TEXT_TOO_LONG_CODE = 'button_links_text_too_long';
+
+/** Validation error when appending button links to the private reply text exceeds the 1000-character limit. */
+export class ButtonLinksTextTooLongError extends TypeError {
+  readonly code = BUTTON_LINKS_TEXT_TOO_LONG_CODE;
+}
+
 /**
  * First message of a follow gate: the rendered gate text with ONE server-generated postback button (no URL buttons),
  * plus the snapshot of the resource message (the automation's reply text and URL buttons) sent after the tap.
@@ -206,12 +217,12 @@ export function storedFollowGateConfig(enabled: unknown, message: unknown, butto
 export function renderFollowGatePayload(
   gate: { message: string; buttonTitle: string },
   variables: ReplyVariables,
-  resource: { replyText: string; buttons: Array<{ title: string; url: string }> },
+  resource: { replyText: string; buttons: Array<{ title: string; url: string }>; buttonLinksInText?: boolean },
   automationId: string,
   attachment?: ResourceAttachment | null,
 ): PrivateReplyPayload & { followGate: FollowGateSnapshot } {
   const first = renderReply(gate.message, variables, [], { mode: 'postback', titles: [gate.buttonTitle], automationId });
-  const rendered = renderReply(resource.replyText, variables, resource.buttons);
+  const rendered = renderReply(resource.replyText, variables, resource.buttons, undefined, resource.buttonLinksInText);
   // The attachment key exists only when configured, so gates without one keep their exact historic payload.
   return { ...first, followGate: { buttonTitle: gate.buttonTitle.trim(), ...(attachment ? { attachment: { kind: attachment.kind, url: attachment.url } } : {}),
     resource: { text: rendered.text, buttons: rendered.buttons } } };
@@ -224,25 +235,31 @@ function removeEmptyUsername(template: string): string {
     .replace(/[ \t]*\{\{username\}\}/gu, '');
 }
 
+/** Meta's limit for the text of an Instagram/Messenger button template. */
+const BUTTON_TEMPLATE_TEXT_MAX = 640;
+
 export function renderReply(
   template: string,
   variables: ReplyVariables,
   buttons: Array<{ title: string; url: string }>,
   interactive?: { mode: InteractiveMode; titles: string[]; automationId: string },
+  buttonLinksInText = false,
 ): PrivateReplyPayload {
   if (!template.trim()) throw new TypeError('Reply text is required');
   if (buttons.length > 2) throw new TypeError('At most two buttons are allowed');
 
   // No value for {{username}} (Facebook people without a role on the app): drop the token and tidy the gap it leaves.
   const source = variables.username.trim() === '' ? removeEmptyUsername(template) : template;
-  const text = source.replace(/\{\{([^{}]+)\}\}/gu, (_whole, name: string) => {
+  const substituted = source.replace(/\{\{([^{}]+)\}\}/gu, (_whole, name: string) => {
     if (name !== 'username' && name !== 'comment' && name !== 'keyword' && name !== 'account' && name !== 'media') {
       throw new TypeError('Unsupported reply variable');
     }
     return variables[name] ?? '';
   });
-  if (/\{\{|\}\}/u.test(text)) throw new TypeError('Malformed reply variable');
-  if (!text.trim() || text.length > 1000) throw new TypeError('Reply text is empty or too long');
+  if (/\{\{|\}\}/u.test(substituted)) throw new TypeError('Malformed reply variable');
+  if (!substituted.trim() || (!buttonLinksInText && substituted.length > 1000)) {
+    throw new TypeError('Reply text is empty or too long');
+  }
 
   const safeButtons = buttons.map(({ title, url }) => {
     if (!title.trim() || title.length > 20) throw new TypeError('Button title is empty or too long');
@@ -258,10 +275,23 @@ export function renderReply(
     return { title, url: parsed.toString() };
   });
 
+  const text = composeButtonLinksText(substituted, safeButtons, buttonLinksInText);
+  const linksAppended = text !== substituted;
+  // Meta caps button-template text at 640 characters; composed links make that limit reachable, so enforce it here.
+  if (linksAppended && text.length > BUTTON_TEMPLATE_TEXT_MAX) {
+    throw new ButtonLinksTextTooLongError('Reply text with button links is too long');
+  }
+  if (text.length > 1000) {
+    if (buttonLinksInText && safeButtons.length > 0) {
+      throw new ButtonLinksTextTooLongError('Reply text with button links is empty or too long');
+    }
+    throw new TypeError('Reply text is empty or too long');
+  }
+
   const config = interactive ? validateInteractiveConfig(interactive.mode, interactive.titles, safeButtons.length)
     : { mode: 'none' as const, titles: [] };
   // Mode 'none' returns exactly the historic shape (no extra keys), so stored and sent payloads stay byte-identical.
-  if (config.mode === 'none') return { text, buttons: safeButtons };
+  if (config.mode === 'none') return linksAppended ? { text, buttons: safeButtons, linksInText: true } : { text, buttons: safeButtons };
   if (!/^[A-Za-z0-9_-]{1,64}$/u.test(interactive!.automationId)) throw new TypeError('Invalid automation id for interactive payloads');
   // Payloads are generated here, never provided by users: gate:<automation_id>:<index>.
   const generated = config.titles.map((title, index) => ({ title, payload: `gate:${interactive!.automationId}:${index}` }));
@@ -421,6 +451,8 @@ export class AutomationService {
     replyText: string;
     matchMode?: 'exact' | 'contains';
     buttons?: Array<{ title: string; url: string }>;
+    /** Optional: also append button title+URL lines to the message text (off by default). */
+    buttonLinksInText?: boolean;
     /** Optional public reply after an accepted private reply; enabled requires at least one valid variant. */
     publicReplyEnabled?: boolean;
     publicReplyVariants?: string[];
@@ -437,6 +469,7 @@ export class AutomationService {
   }): string {
     if (!input.name.trim()) throw new TypeError('Automation name is required');
     assertInteractiveRetired(input.interactiveMode, input.interactiveTitles);
+    const buttonLinksInText = buttonLinksInTextConfig(input.buttonLinksInText, false);
     const publicReply = publicReplyConfig(input.publicReplyEnabled, input.publicReplyVariants, { enabled: false, variants: [] });
     const scope = input.scope ?? 'media';
     if (scope !== 'media' && scope !== 'account') throw new TypeError('Invalid automation scope');
@@ -450,7 +483,7 @@ export class AutomationService {
     const attachment = available
       ? validateResourceAttachment({ kind: input.resourceAttachmentKind, url: input.resourceAttachmentUrl }, followGate.enabled) : NO_ATTACHMENT;
     const automationId = randomUUID();
-    renderReply(input.replyText, { username: 'user', comment: 'comment', keyword: 'keyword', account: 'account', media: 'media' }, input.buttons ?? []);
+    renderReply(input.replyText, { username: 'user', comment: 'comment', keyword: 'keyword', account: 'account', media: 'media' }, input.buttons ?? [], undefined, buttonLinksInText);
     let mediaId: string | null = null;
     if (scope === 'account') {
       if (input.mediaId !== undefined && input.mediaId !== null) throw new TypeError('A general automation cannot target one media');
@@ -465,13 +498,13 @@ export class AutomationService {
     }
     const now = new Date().toISOString();
     this.database.prepare(`INSERT INTO automations
-      (automation_id, account_id, media_id, scope, name, status, match_mode, reply_text, buttons_json,
+      (automation_id, account_id, media_id, scope, name, status, match_mode, reply_text, buttons_json, button_links_in_text,
        created_at, updated_at, real_enabled, monitoring_started_at, public_reply_enabled, public_reply_variants_json,
        interactive_mode, interactive_titles_json, follow_gate_enabled, follow_gate_message, follow_gate_button_title,
        resource_attachment_kind, resource_attachment_url)
-      VALUES (?, ?, ?, ?, ?, 'disabled', ?, ?, ?, ?, ?, 0, NULL, ?, ?, 'none', '[]', ?, ?, ?, ?, ?)`)
+      VALUES (?, ?, ?, ?, ?, 'disabled', ?, ?, ?, ?, ?, ?, 0, NULL, ?, ?, 'none', '[]', ?, ?, ?, ?, ?)`)
       .run(automationId, input.accountId, mediaId, scope, input.name.trim(), input.matchMode ?? 'contains',
-        input.replyText, JSON.stringify(input.buttons ?? []), now, now, publicReply.enabled ? 1 : 0, JSON.stringify(publicReply.variants),
+        input.replyText, JSON.stringify(input.buttons ?? []), buttonLinksInText ? 1 : 0, now, now, publicReply.enabled ? 1 : 0, JSON.stringify(publicReply.variants),
         followGate.enabled ? 1 : 0, followGate.message, followGate.buttonTitle, attachment.kind, attachment.url);
     return automationId;
   }
@@ -486,6 +519,8 @@ export class AutomationService {
     matchMode: 'exact' | 'contains';
     buttons: Array<{ title: string; url: string }>;
     keywords: string[];
+    /** Omitted: keep the stored buttonLinksInText setting. */
+    buttonLinksInText?: boolean;
     /** Omitted: keep the stored public reply configuration. */
     publicReplyEnabled?: boolean;
     publicReplyVariants?: string[];
@@ -502,13 +537,14 @@ export class AutomationService {
   }): void {
     if (!input.name.trim()) throw new TypeError('Automation name is required');
     assertInteractiveRetired(input.interactiveMode, input.interactiveTitles);
-    const stored = this.database.prepare(`SELECT scope, public_reply_enabled, public_reply_variants_json,
+    const stored = this.database.prepare(`SELECT scope, button_links_in_text, public_reply_enabled, public_reply_variants_json,
         follow_gate_enabled, follow_gate_message, follow_gate_button_title, resource_attachment_kind, resource_attachment_url
       FROM automations WHERE account_id=? AND automation_id=?`)
-      .get(accountId, automationId) as { scope: AutomationScope; public_reply_enabled: number; public_reply_variants_json: string;
+      .get(accountId, automationId) as { scope: AutomationScope; button_links_in_text: number; public_reply_enabled: number; public_reply_variants_json: string;
         follow_gate_enabled: number; follow_gate_message: string; follow_gate_button_title: string;
         resource_attachment_kind: string; resource_attachment_url: string } | undefined;
     if (!stored) throw new Error('Automation does not belong to this account');
+    const buttonLinksInText = buttonLinksInTextConfig(input.buttonLinksInText, stored.button_links_in_text === 1);
     const gateInput = { enabled: input.followGateEnabled, message: input.followGateMessage, buttonTitle: input.followGateButtonTitle };
     const available = followGateAvailable(this.options.followGateAvailable);
     if (!available) {
@@ -531,7 +567,7 @@ export class AutomationService {
     const normalizedKeywords = input.keywords.map(normalizeMatchText);
     if (!normalizedKeywords.length || normalizedKeywords.some((phrase) => !phrase)
       || new Set(normalizedKeywords).size !== normalizedKeywords.length) throw new TypeError('Automation keywords must be distinct non-empty phrases');
-    renderReply(input.replyText, { username: 'user', comment: 'comment', keyword: 'keyword', account: 'account', media: 'media' }, input.buttons);
+    renderReply(input.replyText, { username: 'user', comment: 'comment', keyword: 'keyword', account: 'account', media: 'media' }, input.buttons, undefined, buttonLinksInText);
     if (mediaId !== null) {
       const media = this.database.prepare(`SELECT 1 FROM media WHERE account_id=? AND media_id=?`).get(accountId, mediaId);
       if (!media) throw new Error('Media does not belong to this account');
@@ -539,11 +575,11 @@ export class AutomationService {
     const now = new Date().toISOString();
     this.database.exec('BEGIN IMMEDIATE');
     try {
-      const updated = this.database.prepare(`UPDATE automations SET media_id=?, name=?, match_mode=?, reply_text=?, buttons_json=?,
+      const updated = this.database.prepare(`UPDATE automations SET media_id=?, name=?, match_mode=?, reply_text=?, buttons_json=?, button_links_in_text=?,
         public_reply_enabled=?, public_reply_variants_json=?, interactive_mode='none', interactive_titles_json='[]',
         follow_gate_enabled=?, follow_gate_message=?, follow_gate_button_title=?, resource_attachment_kind=?, resource_attachment_url=?,
         version=version+1, updated_at=? WHERE account_id=? AND automation_id=? AND scope=? AND name NOT LIKE '% (archived)'`)
-        .run(mediaId, input.name.trim(), input.matchMode, input.replyText, JSON.stringify(input.buttons),
+        .run(mediaId, input.name.trim(), input.matchMode, input.replyText, JSON.stringify(input.buttons), buttonLinksInText ? 1 : 0,
           publicReply.enabled ? 1 : 0, JSON.stringify(publicReply.variants),
           followGate.enabled ? 1 : 0, followGate.message, followGate.buttonTitle, attachment.kind, attachment.url,
           now, accountId, automationId, stored.scope);
@@ -611,6 +647,11 @@ export class AutomationService {
       .run(accountId, expectedReasonCode);
     if (Number(result.changes) !== 1) throw new Error('Safety hold changed or does not belong to this account');
   }
+}
+
+function buttonLinksInTextConfig(enabled: unknown, current: boolean): boolean {
+  if (enabled !== undefined && typeof enabled !== 'boolean') throw new TypeError('buttonLinksInText must be a boolean');
+  return enabled === undefined ? current : enabled;
 }
 
 /**

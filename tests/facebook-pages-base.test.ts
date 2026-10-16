@@ -42,7 +42,7 @@ test('migration v19 backfills existing accounts as instagram and constrains the 
     db.prepare(`INSERT INTO social_accounts (account_id, connection_id, provider_account_id, username, normalized_username, status,
       created_at, updated_at) VALUES ('a1', 'c1', 'p1', 'Brand', 'brand', 'valid', ?, ?)`).run(now, now);
     migrateDatabase(db);
-    assert.equal((db.prepare('PRAGMA user_version').get() as { user_version: number }).user_version, 19);
+    assert.equal((db.prepare('PRAGMA user_version').get() as { user_version: number }).user_version, 20);
     assert.equal((db.prepare("SELECT platform FROM social_accounts WHERE account_id='a1'").get() as { platform: string }).platform, 'instagram');
     assert.throws(() => db.prepare("UPDATE social_accounts SET platform='tiktok' WHERE account_id='a1'").run(), /CHECK|constraint/i);
     db.prepare("UPDATE social_accounts SET platform='facebook' WHERE account_id='a1'").run();
@@ -55,7 +55,7 @@ test('a database newer than the supported schema is still rejected', async () =>
   const db = openDatabase(directory);
   try {
     migrateDatabase(db);
-    db.exec('PRAGMA user_version = 20');
+    db.exec('PRAGMA user_version = 21');
     assert.throws(() => migrateDatabase(db), /newer than supported/i);
   } finally { db.close(); removeTempDir(directory); }
 });

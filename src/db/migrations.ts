@@ -1,6 +1,6 @@
 import type { DatabaseSync } from 'node:sqlite';
 
-const VERSION = 19;
+const VERSION = 20;
 
 const INITIAL_SCHEMA = `
 CREATE TABLE connections (
@@ -181,6 +181,7 @@ export function migrateDatabase(database: DatabaseSync, targetVersion: number = 
     if (current < 17 && target >= 17) migrateModerationAi(database);
     if (current < 18 && target >= 18) migrateLocalAiModel(database);
     if (current < 19 && target >= 19) migrateAccountPlatform(database);
+    if (current < 20 && target >= 20) migrateButtonLinksInText(database);
     database.exec('COMMIT');
   } catch (error) {
     database.exec('ROLLBACK');
@@ -634,3 +635,12 @@ function migrateAccountPlatform(database: DatabaseSync): void {
     PRAGMA user_version = 19;
   `);
 }
+
+/** v20 (button links in text): per-automation opt-in to also append URL button links to the private reply text. */
+function migrateButtonLinksInText(database: DatabaseSync): void {
+  database.exec(`
+    ALTER TABLE automations ADD COLUMN button_links_in_text INTEGER NOT NULL DEFAULT 0 CHECK (button_links_in_text IN (0, 1));
+    PRAGMA user_version = 20;
+  `);
+}
+

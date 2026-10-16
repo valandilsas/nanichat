@@ -29,7 +29,7 @@ export type PendingReviewItem = {
 
 type Row = {
   comment_id: string; automation_id: string; automation_name: string; scope: 'media' | 'account'; media_id: string; reply_text: string;
-  buttons_json: string; permalink: string | null; caption: string | null; media_type: string | null; published_at: string | null; author: string | null; text: string | null; comment_created_at: string | null;
+  buttons_json: string; button_links_in_text: number; permalink: string | null; caption: string | null; media_type: string | null; published_at: string | null; author: string | null; text: string | null; comment_created_at: string | null;
   matched_keywords_json: string; analyzed_at: string | null;
   follow_gate_enabled: number; follow_gate_message: string; follow_gate_button_title: string;
   resource_attachment_kind: string; resource_attachment_url: string;
@@ -52,7 +52,7 @@ export function listPendingReview(database: DatabaseSync, accountId: string,
   // Only automations that currently claim the comment's publication are listed (a general automation yields to an
   // enabled media-specific one), so a comment appears once per claiming automation, exactly as enqueue accepts it.
   const rows = database.prepare(`SELECT c.comment_id, c.automation_id, a.name AS automation_name, a.scope, cm.media_id, a.reply_text,
-      a.buttons_json, m.permalink, m.caption, m.media_type, m.published_at, cm.username AS author, cm.text,
+      a.buttons_json, a.button_links_in_text, m.permalink, m.caption, m.media_type, m.published_at, cm.username AS author, cm.text,
       cm.created_at AS comment_created_at, c.matched_keywords_json, s.finished_at AS analyzed_at,
       a.follow_gate_enabled, a.follow_gate_message, a.follow_gate_button_title, a.resource_attachment_kind, a.resource_attachment_url
     FROM comment_classifications c
@@ -80,7 +80,7 @@ export function listPendingReview(database: DatabaseSync, accountId: string,
       media: (row.permalink || row.media_id).slice(0, 100),
     };
     try {
-      const payload = renderReply(row.reply_text, variables, buttons);
+      const payload = renderReply(row.reply_text, variables, buttons, undefined, row.button_links_in_text === 1);
       previewText = payload.text; previewButtons = payload.buttons;
     } catch { /* invalid template: still list the comment, without a preview */ }
     if (gate.enabled) {

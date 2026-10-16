@@ -105,7 +105,7 @@ test('schema v17+: AI categories accepted, unknown rejected, AI tables created a
       INSERT INTO moderation_flags(flag_id, account_id, media_id, comment_id, category, source, reasons_json, state, created_at, updated_at)
         VALUES ('f1', 'acc1', 'm1', 'c1', 'spam_link', 'rules', '[]', 'HIDDEN', '2026', '2026');`);
     migrateDatabase(db);
-    assert.equal((db.prepare('PRAGMA user_version').get() as { user_version: number }).user_version, 19);
+    assert.equal((db.prepare('PRAGMA user_version').get() as { user_version: number }).user_version, 20);
     assert.deepEqual({ ...(db.prepare(`SELECT flag_id, category, state FROM moderation_flags`).get() as object) }, { flag_id: 'f1', category: 'spam_link', state: 'HIDDEN' });
     for (const [index, category] of ['ai_insult', 'ai_hate', 'ai_spam', 'ai_complaint'].entries()) {
       db.prepare(`INSERT INTO moderation_flags(flag_id, account_id, media_id, comment_id, category, source, reasons_json, state, created_at, updated_at)
@@ -686,7 +686,7 @@ test('schema v18: moderation_ai_settings gains local_model without touching exis
         VALUES ('acc1', 'conn1', 'ig1', 'u', 'u', 'valid', '2026', '2026');
       INSERT INTO moderation_ai_settings(account_id, engine, model, updated_at) VALUES ('acc1', 'gemini', 'gemini-2.5-flash', '2026');`);
     migrateDatabase(db);
-    assert.equal((db.prepare('PRAGMA user_version').get() as { user_version: number }).user_version, 19);
+    assert.equal((db.prepare('PRAGMA user_version').get() as { user_version: number }).user_version, 20);
     assert.deepEqual({ ...(db.prepare(`SELECT engine, model, local_model FROM moderation_ai_settings`).get() as object) },
       { engine: 'gemini', model: 'gemini-2.5-flash', local_model: null });
   } finally {

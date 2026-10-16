@@ -10,7 +10,7 @@ import { ScanProgress, type BacklogService } from '../services/backlog.ts';
 import { QueueReadbackError, type QueueService } from '../services/queue.ts';
 import { listPendingReview, truncateText } from '../services/pending-review.ts';
 import { storedPublicReplyVariants } from '../services/public-reply.ts';
-import { FollowGateConfigError, InteractiveModeRetiredError, assertInteractiveRetired, storedFollowGateConfig } from '../services/automations.ts';
+import { ButtonLinksTextTooLongError, FollowGateConfigError, InteractiveModeRetiredError, assertInteractiveRetired, storedFollowGateConfig } from '../services/automations.ts';
 import { ResourceAttachmentError, storedResourceAttachment } from '../services/resource-attachment.ts';
 import { followGateAvailable } from '../services/follow-gate-rules.ts';
 import type { ImportedMetaEnvironment } from '../security/env-import.ts';
@@ -100,7 +100,7 @@ export function createApiHandler(deps: ApiDependencies) {
       const status = error instanceof ApiError ? error.status : error instanceof TypeError ? 400 : 409;
       const code = error instanceof ApiError ? error.code
         : error instanceof AccountAdoptionRequiredError || error instanceof PlatformNotSupportedError || error instanceof PlatformFeatureNotSupportedError ? error.code
-        : error instanceof FollowGateConfigError || error instanceof ResourceAttachmentError || error instanceof InteractiveModeRetiredError ? error.code
+        : error instanceof FollowGateConfigError || error instanceof ResourceAttachmentError || error instanceof InteractiveModeRetiredError || error instanceof ButtonLinksTextTooLongError ? error.code
           : error instanceof TypeError ? 'invalid_request' : 'operation_rejected';
       send(response, status, { error: code });
     }
@@ -221,6 +221,7 @@ async function route(
     // (boolean, list of valid variants, enabled requires >= 1) and never coerces; any violation is a TypeError (400).
     const automationId = service.create({ accountId: account, scope, mediaId: scope === 'account' ? null : text(body.mediaId), name: text(body.name),
       replyText: text(body.replyText), matchMode: matchMode(body.matchMode, true), buttons: buttons(body.buttons),
+      buttonLinksInText: body.buttonLinksInText as boolean | undefined,
       publicReplyEnabled: body.publicReplyEnabled as boolean | undefined, publicReplyVariants: body.publicReplyVariants as string[] | undefined,
       // Follow gate and attachment: RETIRED (400 follow_gate_retired / attachment_retired unless the test-only override is on).
       ...followGateFields(body) });
@@ -236,6 +237,7 @@ async function route(
       name: text(body.name), mediaId: body.mediaId === undefined || body.mediaId === null ? null : text(body.mediaId),
       scope: automationScope(body.scope, false), replyText: text(body.replyText),
       matchMode: matchMode(body.matchMode, false), buttons: buttons(body.buttons), keywords: stringList(body.keywords, 20),
+      buttonLinksInText: body.buttonLinksInText as boolean | undefined,
       // Omitted: the stored public reply configuration is kept.
       publicReplyEnabled: body.publicReplyEnabled as boolean | undefined, publicReplyVariants: body.publicReplyVariants as string[] | undefined,
       // Follow gate and attachment: RETIRED, so a valid PUT resets any stored configuration to off/empty (400 if requested).
@@ -568,7 +570,7 @@ function listMedia(db: DatabaseSync, selected?: string) {
 function listAutomations(db: DatabaseSync, selected?: string, gateAvailable = false) {
   if (selected) accountId(selected, db);
   const rows = db.prepare(`SELECT automation_id AS automationId, account_id AS accountId, media_id AS mediaId, scope, name,
-      status, match_mode AS matchMode, reply_text AS replyText, buttons_json AS buttonsJson, real_enabled AS realEnabled,
+      status, match_mode AS matchMode, reply_text AS replyText, buttons_json AS buttonsJson, button_links_in_text AS buttonLinksInText, real_enabled AS realEnabled,
       monitoring_started_at AS monitoringStartedAt, public_reply_enabled AS publicReplyEnabled,
       public_reply_variants_json AS publicReplyVariantsJson, follow_gate_enabled AS followGateEnabled,
       follow_gate_message AS followGateMessage, follow_gate_button_title AS followGateButtonTitle,
@@ -579,7 +581,7 @@ function listAutomations(db: DatabaseSync, selected?: string, gateAvailable = fa
       storedFollowGateConfig(row.followGateEnabled, row.followGateMessage, row.followGateButtonTitle)),
     // Retired follow gate: the fields stay in the DTO but always read as disabled/empty (stored values are inert).
     ...(gateAvailable ? {} : { followGateEnabled: false, followGateMessage: '', resourceAttachmentKind: '', resourceAttachmentUrl: '' }),
-    buttons: JSON.parse(String(row.buttonsJson)), realEnabled: Boolean(row.realEnabled),
+    buttons: JSON.parse(String(row.buttonsJson)), buttonLinksInText: Boolean(row.buttonLinksInText), realEnabled: Boolean(row.realEnabled),
     publicReplyEnabled: Boolean(row.publicReplyEnabled), publicReplyVariants: storedPublicReplyVariants(String(publicReplyVariantsJson)),
     keywords: db.prepare(`SELECT phrase FROM automation_keywords WHERE account_id=? AND automation_id=? ORDER BY rowid`)
       .all(String(row.accountId), String(row.automationId)) }));

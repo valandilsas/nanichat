@@ -80,6 +80,8 @@ export type PrivateReplyPayload = {
   postbackButtons?: InteractiveButton[];
   /** Follow gate (honor system): snapshot of the resource message sent after the user's tap. Never sent itself. */
   followGate?: FollowGateSnapshot;
+  /** Set only when `text` already ends with the composed button links (buttonLinksInText); absent otherwise. */
+  linksInText?: true;
 };
 
 /**
@@ -206,3 +208,20 @@ export type EncryptedSecret = {
   ciphertext: string;
   tag: string;
 };
+
+/**
+ * Appends `<title>: <url>` lines after a blank line when `buttonLinksInText` is enabled and at least one button has both
+ * title and URL. When disabled or without buttons, returns `text` byte-for-byte unchanged.
+ */
+export function composeButtonLinksText(
+  text: string,
+  buttons: ReadonlyArray<{ title: string; url: string }> | undefined,
+  buttonLinksInText = false,
+): string {
+  if (!buttonLinksInText || !buttons?.length) return text;
+  const lines = buttons
+    .filter((button) => button.title.trim() && button.url.trim())
+    .map((button) => `${button.title}: ${button.url}`);
+  return lines.length ? `${text}\n\n${lines.join('\n')}` : text;
+}
+

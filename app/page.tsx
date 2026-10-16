@@ -31,6 +31,7 @@ import {
   FACEBOOK_READBACK_CODE, FACEBOOK_READBACK_NOTE, PLATFORM_ERROR_LABELS, accountHandle, accountHandleOrFallback, connectionsSubtitle, navGroupLabel, platformBadge, platformOf, readbackHint, sentTargetLabel, viewPostLabel,
 } from './platform';
 import { PUBLIC_REPLY_SAMPLE_USERNAME, describePublicReply, parseVariantLines, previewExamples, publicReplyErrorHint, type PublicReplyDto, variantCountLabel } from './public-reply';
+import { composeButtonLinksText } from '../src/core/domain';
 
 type Account = { accountId: string; connectionId: string; username: string; platform?: string; status: string; monitoringPaused: boolean; sendHoldReason?: string | null; last_sync?: string; last_error?: string; coverage?: string };
 type Candidate = { connectionId: string; providerAccountId: string; username: string; platform?: string };
@@ -38,7 +39,7 @@ type Connection = { id: string; name: string; login_kind: string; app_id?: strin
 type Media = { accountId: string; mediaId: string; permalink?: string; publishedAt?: string; caption?: string | null; mediaType?: string | null; thumbnailUrl?: string | null };
 type ScanJob = { id: string; status: string; createdAt?: string; result?: any; progress?: ScanProgressDto; errorCode?: string };
 const SCAN_JOB_KEY = 'social-desk.activeScanJob';
-type Automation = { automationId: string; accountId: string; mediaId: string | null; scope?: 'media' | 'account'; name: string; status: string; realEnabled: boolean; keywords: Array<{ phrase: string }>; buttons?: Array<{ title: string; url: string }>; replyText?: string; matchMode?: 'exact' | 'contains'; publicReplyEnabled?: boolean; publicReplyVariants?: string[]; followGateEnabled?: boolean; followGateMessage?: string; followGateButtonTitle?: string; resourceAttachmentKind?: string; resourceAttachmentUrl?: string };
+type Automation = { automationId: string; accountId: string; mediaId: string | null; scope?: 'media' | 'account'; name: string; status: string; realEnabled: boolean; keywords: Array<{ phrase: string }>; buttons?: Array<{ title: string; url: string }>; buttonLinksInText?: boolean; replyText?: string; matchMode?: 'exact' | 'contains'; publicReplyEnabled?: boolean; publicReplyVariants?: string[]; followGateEnabled?: boolean; followGateMessage?: string; followGateButtonTitle?: string; resourceAttachmentKind?: string; resourceAttachmentUrl?: string };
 type AttachmentDto = { kind: string; url: string };
 type PartDto = { state: string; safeErrorCode: string | null; attempts: number };
 type FollowGateSession = { state: string; buttonTitle: string | null; gateSentAt: string | null; tapAt: string | null; windowExpiresAt: string | null; nextPollAt: string | null; pollCount: number; resourceMessageId: string | null; lastErrorCode: string | null; attachment?: AttachmentDto; parts?: { attachment: PartDto; text: PartDto } };
@@ -391,8 +392,11 @@ function ConfirmDialog({ options, onResult }: { options: ConfirmOptions; onResul
 function greeting(now = new Date()) { const hour = now.getHours(); return hour < 12 ? 'Buenos días' : hour < 19 ? 'Buenas tardes' : 'Buenas noches'; }
 
 /** DM bubble text for previews: the same sample substitution the creation form uses. */
-function sampleReply(text: string | undefined, keyword?: string) {
-  return (text ?? '').replace(/{{username}}/g, 'ana').replace(/{{keyword}}/g, keyword || 'palabra');
+function sampleReply(text: string | undefined, keyword?: string, buttons?: ReadonlyArray<{ title: string; url: string }>, buttonLinksInText = false) {
+  const rendered = (text ?? '').replace(/{{username}}/g, 'ana').replace(/{{keyword}}/g, keyword || 'palabra');
+  // Normalize URLs the way the server does (new URL().toString()) so the preview shows exactly what is sent.
+  const normalized = (buttons ?? []).map((button) => { try { return { ...button, url: new URL(button.url).toString() }; } catch { return button; } });
+  return composeButtonLinksText(rendered, normalized, buttonLinksInText);
 }
 
 /** Count-up runs once per page load, the first time Resumen shows real numbers. */
@@ -578,11 +582,13 @@ function AccountPrompt({ id, title, detail, choices, onSelect }: { id: string; t
 function AutomationView({ accounts, media, rows, selected, api, act, confirm }: { accounts: Account[]; media: Media[]; rows: Automation[]; selected: string; api: Api; act: Act; confirm: Confirm }) {
   const [accountId, setAccountId] = useState(selected === 'all' ? '' : selected); const [mediaId, setMediaId] = useState(''); const [name, setName] = useState(''); const [keywords, setKeywords] = useState(''); const [replyText, setReplyText] = useState('Hola {{username}}, aquí tienes la información sobre {{keyword}}.'); const [mode, setMode] = useState('contains');
   const [buttonTitle, setButtonTitle] = useState(''); const [buttonUrl, setButtonUrl] = useState(''); const [buttonTitle2, setButtonTitle2] = useState(''); const [buttonUrl2, setButtonUrl2] = useState('');
+  const [buttonLinksInText, setButtonLinksInText] = useState(false);
   const [publicEnabled, setPublicEnabled] = useState(false); const [publicVariants, setPublicVariants] = useState('');
   const [editing, setEditing] = useState<Automation | null>(null);
   useEffect(() => { if (selected !== 'all') { setAccountId(selected); setMediaId(''); } }, [selected]);
   const ownMedia = media.filter((item) => item.accountId === accountId);
-  async function create(event: FormEvent) { event.preventDefault(); const buttons = [{ title: buttonTitle, url: buttonUrl }, { title: buttonTitle2, url: buttonUrl2 }].filter((button) => button.title.trim() || button.url.trim()); await act(() => api('/api/automations', 'POST', { accountId, ...automationTargetPayload(mediaId), name, keywords: keywords.split(',').map((item) => item.trim()).filter(Boolean), replyText, matchMode: mode, buttons, publicReplyEnabled: publicEnabled && !isFacebook, publicReplyVariants: isFacebook ? [] : parseVariantLines(publicVariants) }), 'Automatización guardada en modo de prueba.'); }
+  const configuredButtons = [{ title: buttonTitle.trim(), url: buttonUrl.trim() }, { title: buttonTitle2.trim(), url: buttonUrl2.trim() }].filter((button) => button.title && button.url);
+  async function create(event: FormEvent) { event.preventDefault(); const buttons = [{ title: buttonTitle.trim(), url: buttonUrl.trim() }, { title: buttonTitle2.trim(), url: buttonUrl2.trim() }].filter((button) => button.title || button.url); await act(() => api('/api/automations', 'POST', { accountId, ...automationTargetPayload(mediaId), name, keywords: keywords.split(',').map((item) => item.trim()).filter(Boolean), replyText, matchMode: mode, buttons, buttonLinksInText: buttons.length > 0 && buttonLinksInText, publicReplyEnabled: publicEnabled && !isFacebook, publicReplyVariants: isFacebook ? [] : parseVariantLines(publicVariants) }), 'Automatización guardada en modo de prueba.'); }
   async function toggleReal(row: Automation) {
     if (!row.realEnabled && !(await confirm({ title: `Autorizar respuestas reales en «${row.name}»`, body: 'Esta automatización podrá enviar mensajes privados reales cuando el Dry Run global esté desactivado. El Dry Run global sigue siendo un control independiente.', confirmLabel: 'Autorizar modo real', danger: true }))) return;
     await act(() => api(`/api/automations/${row.automationId}/real`, 'PATCH', { accountId: row.accountId, enabled: !row.realEnabled, confirmed: true }), row.realEnabled ? 'Respuestas reales desactivadas.' : 'Automatización autorizada para modo real.');
@@ -604,7 +610,7 @@ function AutomationView({ accounts, media, rows, selected, api, act, confirm }: 
           <ArrowRight size={16} className="recipe-arrow" aria-hidden="true" />
           <div className="recipe-body">
             <strong>{row.name}</strong>
-            <span className="dm">{sampleReply(row.replyText, row.keywords[0]?.phrase) || 'Sin mensaje'}</span>
+            <span className="dm">{sampleReply(row.replyText, row.keywords[0]?.phrase, row.buttons, row.buttonLinksInText) || 'Sin mensaje'}</span>
             <div className="keyword-list">{row.keywords.length ? row.keywords.map((keyword) => <span className="kw-chip" key={keyword.phrase}>{keyword.phrase}</span>) : <span className="muted">Sin palabras clave</span>}</div>
           </div>
         </div>
@@ -626,7 +632,7 @@ function AutomationView({ accounts, media, rows, selected, api, act, confirm }: 
       </article>; })}</div> : <Empty nani="awake" title="Aún no sé qué responder. Enséñame con una automatización." detail="Cree una automatización asociada a una de sus publicaciones. Empieza en modo prueba." action={() => focusById('auto-account')} actionLabel="Crear la primera automatización" primary />}
     </section>
     {editing && <AutomationEditDialog row={editing} platform={platformOf(accounts.find((item) => item.accountId === editing.accountId))} mediaOptions={media.filter((item) => item.accountId === editing.accountId).map((item) => ({ id: item.mediaId, label: mediaLabel(item) }))} onClose={() => setEditing(null)} onSave={async (values) => {
-      const saved = await act(() => api(`/api/automations/${editing.automationId}`, 'PUT', { accountId: editing.accountId, mediaId: editing.scope === 'account' ? null : values.mediaId, name: values.name, replyText: values.replyText, matchMode: values.matchMode, buttons: editing.buttons ?? [], keywords: values.keywords.split(',').map((keyword) => keyword.trim()).filter(Boolean), publicReplyEnabled: values.publicReplyEnabled, publicReplyVariants: parseVariantLines(values.publicReplyVariants) }), 'Automatización actualizada; se invalidaron elementos con plantilla anterior.');
+      const saved = await act(() => api(`/api/automations/${editing.automationId}`, 'PUT', { accountId: editing.accountId, mediaId: editing.scope === 'account' ? null : values.mediaId, name: values.name, replyText: values.replyText, matchMode: values.matchMode, buttons: editing.buttons ?? [], buttonLinksInText: values.buttonLinksInText, keywords: values.keywords.split(',').map((keyword) => keyword.trim()).filter(Boolean), publicReplyEnabled: values.publicReplyEnabled, publicReplyVariants: parseVariantLines(values.publicReplyVariants) }), 'Automatización actualizada; se invalidaron elementos con plantilla anterior.');
       if (saved) setEditing(null);
     }} />}
     <div className="composer">
@@ -634,7 +640,15 @@ function AutomationView({ accounts, media, rows, selected, api, act, confirm }: 
         <div className="seq-header"><span className="seq-num">1</span> Dónde responder</div><div className="form-grid"><Field label="Cuenta"><select id="auto-account" required value={accountId} onChange={(event) => { setAccountId(event.target.value); setMediaId(''); }}><option value="">Seleccione una cuenta</option>{accounts.map((account) => <option key={account.accountId} value={account.accountId}>{accountHandle(account)}{platformBadge(account, accounts) ? ` · ${platformBadge(account, accounts)}` : ''}</option>)}</select></Field><Field label="Publicación"><select required disabled={!accountId} value={mediaId} onChange={(event) => setMediaId(event.target.value)}><option value="">Seleccione una publicación</option><option value={GENERAL_MEDIA_OPTION}>Todas las publicaciones (general)</option>{ownMedia.map((item) => <option key={item.mediaId} value={item.mediaId}>{mediaLabel(item)}</option>)}</select>{mediaId === GENERAL_MEDIA_OPTION && <small className="hint">Se aplica a cualquier publicación de la cuenta que no tenga su propia automatización; solo comentarios posteriores a la activación.</small>}</Field><Field label="Nombre"><input required value={name} onChange={(event) => setName(event.target.value)} /></Field></div>
         <div className="seq-header"><span className="seq-num">2</span> Cuándo</div><div className="form-grid"><Field label="Palabras clave · separadas por coma"><input required value={keywords} onChange={(event) => setKeywords(event.target.value)} placeholder="guia, ebook" /></Field><Field label="Coincidencia"><select value={mode} onChange={(event) => setMode(event.target.value)}><option value="contains">Frase dentro del comentario</option><option value="exact">Comentario exacto</option></select></Field></div>
         <div className="seq-header"><span className="seq-num">3</span> Qué responde</div><div className="form-grid full-width"><Field label="Respuesta · variables {{username}}, {{comment}}, {{keyword}}"><textarea required rows={4} value={replyText} onChange={(event) => setReplyText(event.target.value)} /></Field></div>
-        <div className="seq-header"><span className="seq-num">4</span> Botones (opcional)</div><div className="form-grid"><Field label="Botón URL opcional · título"><input maxLength={20} value={buttonTitle} onChange={(event) => setButtonTitle(event.target.value)} placeholder="Ver recurso" /></Field><Field label="URL HTTPS"><input type="url" value={buttonUrl} onChange={(event) => setButtonUrl(event.target.value)} placeholder="https://…" /></Field><Field label="Segundo botón · título opcional"><input maxLength={20} value={buttonTitle2} onChange={(event) => setButtonTitle2(event.target.value)} /></Field><Field label="Segundo botón · URL HTTPS"><input type="url" value={buttonUrl2} onChange={(event) => setButtonUrl2(event.target.value)} /></Field></div><p className="hint">{MEDIA_LINK_TIP}</p>{isFacebook && <p className="hint">{FACEBOOK_BUTTONS_NOTE}</p>}
+        <div className="seq-header"><span className="seq-num">4</span> Botones (opcional)</div><div className="form-grid"><Field label="Botón URL opcional · título"><input maxLength={20} value={buttonTitle} onChange={(event) => setButtonTitle(event.target.value)} placeholder="Ver recurso" /></Field><Field label="URL HTTPS"><input type="url" value={buttonUrl} onChange={(event) => setButtonUrl(event.target.value)} placeholder="https://…" /></Field><Field label="Segundo botón · título opcional"><input maxLength={20} value={buttonTitle2} onChange={(event) => setButtonTitle2(event.target.value)} /></Field><Field label="Segundo botón · URL HTTPS"><input type="url" value={buttonUrl2} onChange={(event) => setButtonUrl2(event.target.value)} /></Field></div>
+        {configuredButtons.length > 0 && <label className="toggle-row" htmlFor="new-button-links-in-text">
+          <input id="new-button-links-in-text" type="checkbox" checked={buttonLinksInText} onChange={(event) => setButtonLinksInText(event.target.checked)} />
+          <div className="toggle-row-text">
+            <strong>Incluir también los enlaces en el texto</strong>
+            <span>Instagram no muestra los botones en computador; así quien abra el mensaje desde la web también ve los enlaces.</span>
+          </div>
+        </label>}
+        <p className="hint">{MEDIA_LINK_TIP}</p>{isFacebook && <p className="hint">{FACEBOOK_BUTTONS_NOTE}</p>}
         <div className="seq-header"><span className="seq-num">5</span> Respuesta pública (opcional)</div><PublicReplyFields idPrefix="new" enabled={publicEnabled && !isFacebook} setEnabled={setPublicEnabled} text={publicVariants} setText={setPublicVariants} unavailable={isFacebook} /><p className="hint">Puede añadir cero, uno o dos botones URL en esta pantalla. Las palabras clave son sinónimos: si varias aparecen en un mismo comentario, se procesa una sola coincidencia.</p>
         <div><button className="btn-main" disabled={!accountId || !mediaId}>Guardar automatización</button></div></form>
       <aside className="composer-preview" aria-label="Vista previa del mensaje privado">
@@ -652,7 +666,7 @@ function AutomationView({ accounts, media, rows, selected, api, act, confirm }: 
               {isFacebook && <div className="context">{FACEBOOK_USERNAME_FALLBACK_NOTE}</div>}
               {replyText ? (
                 <div className="bubble">
-                  {replyText.replace(/{{username}}/g, 'ana').replace(/{{keyword}}/g, keywords.split(',')[0]?.trim() || 'palabra')}
+                  {sampleReply(replyText, keywords.split(',')[0]?.trim(), configuredButtons, buttonLinksInText)}
                   {buttonTitle.trim() && buttonUrl.trim() && <div className="pbtn">{buttonTitle}</div>}
                   {buttonTitle2.trim() && buttonUrl2.trim() && <div className="pbtn">{buttonTitle2}</div>}
                 </div>
@@ -667,10 +681,11 @@ function AutomationView({ accounts, media, rows, selected, api, act, confirm }: 
   </div>;
 }
 
-function AutomationEditDialog({ row, platform, mediaOptions, onSave, onClose }: { row: Automation; platform: 'instagram' | 'facebook'; mediaOptions: Array<{ id: string; label: string }>; onSave(values: { name: string; mediaId: string; keywords: string; replyText: string; matchMode: 'exact' | 'contains'; publicReplyEnabled: boolean; publicReplyVariants: string }): Promise<void>; onClose(): void }) {
+function AutomationEditDialog({ row, platform, mediaOptions, onSave, onClose }: { row: Automation; platform: 'instagram' | 'facebook'; mediaOptions: Array<{ id: string; label: string }>; onSave(values: { name: string; mediaId: string; keywords: string; replyText: string; matchMode: 'exact' | 'contains'; buttonLinksInText: boolean; publicReplyEnabled: boolean; publicReplyVariants: string }): Promise<void>; onClose(): void }) {
   const [name, setName] = useState(row.name); const [mediaId, setMediaId] = useState(row.mediaId ?? ''); const isGeneral = row.scope === 'account';
   const [keywords, setKeywords] = useState(row.keywords.map((item) => item.phrase).join(', '));
   const [replyText, setReplyText] = useState(row.replyText ?? 'Hola {{username}}'); const [matchMode, setMatchMode] = useState<string>(row.matchMode ?? 'contains');
+  const [buttonLinksInText, setButtonLinksInText] = useState(Boolean(row.buttonLinksInText));
   const [publicEnabled, setPublicEnabled] = useState(Boolean(row.publicReplyEnabled)); const [publicVariants, setPublicVariants] = useState((row.publicReplyVariants ?? []).join('\n'));
   const [busy, setBusy] = useState(false); const [problem, setProblem] = useState('');
   async function submit(event: FormEvent) {
@@ -678,7 +693,7 @@ function AutomationEditDialog({ row, platform, mediaOptions, onSave, onClose }: 
     if (matchMode !== 'exact' && matchMode !== 'contains') { setProblem('Modo inválido: elija coincidencia exacta o frase dentro del comentario.'); return; }
     if (platform === 'instagram' && publicEnabled && parseVariantLines(publicVariants).length === 0) { setProblem('Añada al menos una variante para la respuesta pública o desactívela.'); return; }
     setProblem(''); setBusy(true);
-    try { await onSave({ name: name.trim(), mediaId: mediaId.trim(), keywords, replyText, matchMode, publicReplyEnabled: platform === 'instagram' && publicEnabled, publicReplyVariants: platform === 'instagram' ? publicVariants : '' }); } finally { setBusy(false); }
+    try { await onSave({ name: name.trim(), mediaId: mediaId.trim(), keywords, replyText, matchMode, buttonLinksInText, publicReplyEnabled: platform === 'instagram' && publicEnabled, publicReplyVariants: platform === 'instagram' ? publicVariants : '' }); } finally { setBusy(false); }
   }
   return <Modal titleId="edit-auto-title" descriptionId="edit-auto-desc" onClose={onClose} wide>
     <form onSubmit={(event) => void submit(event)} className="modal-form">
@@ -692,6 +707,13 @@ function AutomationEditDialog({ row, platform, mediaOptions, onSave, onClose }: 
         <Field label="Coincidencia"><select value={matchMode} onChange={(event) => setMatchMode(event.target.value)}><option value="contains">Frase dentro del comentario (contains)</option><option value="exact">Comentario exacto (exact)</option></select></Field>
         <Field label="Plantilla de respuesta · variables {{username}}, {{comment}}, {{keyword}}"><textarea required rows={4} value={replyText} onChange={(event) => setReplyText(event.target.value)} /></Field>
       </div>
+      {(row.buttons?.length ?? 0) > 0 && <label className="toggle-row" htmlFor="edit-button-links-in-text">
+        <input id="edit-button-links-in-text" type="checkbox" checked={buttonLinksInText} onChange={(event) => setButtonLinksInText(event.target.checked)} />
+        <div className="toggle-row-text">
+          <strong>Incluir también los enlaces en el texto</strong>
+          <span>Instagram no muestra los botones en computador; así quien abra el mensaje desde la web también ve los enlaces.</span>
+        </div>
+      </label>}
       <PublicReplyFields idPrefix="edit" enabled={publicEnabled && platform === 'instagram'} setEnabled={setPublicEnabled} text={publicVariants} setText={setPublicVariants} unavailable={platform === 'facebook'} />
       <datalist id="edit-media-options">{mediaOptions.map((option) => <option key={option.id} value={option.id} label={option.label} />)}</datalist>
       {problem && <p className="form-problem" role="alert">{problem}</p>}
@@ -1054,7 +1076,7 @@ function ConnectionBadge({ status }: { status: string }) {
 }
 function Empty({ title, detail, action, actionLabel, primary, icon: Icon = Inbox, nani }: { title: string; detail: string; action?: () => void; actionLabel?: string; primary?: boolean; icon?: any; nani?: NaniState }) { return <div className={nani ? 'empty-state with-nani' : 'empty-state'}>{nani ? <Nani state={nani} size={84} decorative /> : <div className="empty-icon"><Icon size={20} strokeWidth={1.9} aria-hidden="true" /></div>}<strong>{title}</strong><p>{detail}</p>{action && <button className={primary ? 'button primary' : 'button secondary'} onClick={action}>{actionLabel}</button>}</div>; }
 function formatDate(value: string) { const date = new Date(value); return Number.isNaN(date.valueOf()) ? '—' : date.toLocaleString('es-CO', { dateStyle: 'medium', timeStyle: 'short' }); }
-function safeErrorLabel(code: string) { const labels: Record<string, string> = { account_not_found: 'La cuenta indicada no existe.', connection_not_found: 'La conexión indicada no existe.', invalid_request: 'Revise los campos e inténtelo de nuevo.', origin_or_csrf_rejected: 'La solicitud local no superó la protección de origen.', operation_rejected: 'La operación fue rechazada por una condición de seguridad o estado.', account_scan_failed: 'No se pudo completar el análisis para una cuenta.', follow_gate_invalid: 'La opción «Pedir primero que me sigan» no es válida.', follow_gate_message_invalid: 'Revise el «Mensaje previo»: es obligatorio, de hasta 640 caracteres y solo admite las variables indicadas.', follow_gate_button_title_invalid: 'Revise el «Título del botón»: de 1 a 20 caracteres, sin enlaces ni saltos de línea.', account_adoption_required: 'Esta cuenta pertenecía a una conexión eliminada o desconectada; confirme la adopción para conservar su historial.', follow_gate_retired: FOLLOW_GATE_RETIRED_LABEL, interactive_mode_retired: INTERACTIVE_RETIRED_LABEL, private_reply_not_failed: 'Solo se puede reintentar un mensaje privado que Meta rechazó.', private_reply_window_elapsed: 'Pasaron más de 7 días desde el comentario: Meta ya no permite la respuesta privada.', already_messaged: 'Esta persona ya tiene otro mensaje de esta automatización en la publicación.', ...ATTACHMENT_ERROR_LABELS, ...PLATFORM_ERROR_LABELS, ...DOMAIN_REJECTION_LABELS, ...AI_ERROR_LABELS }; return labels[code] ?? 'Revise el estado de la cuenta y vuelva a intentarlo.'; }
+function safeErrorLabel(code: string) { const labels: Record<string, string> = { account_not_found: 'La cuenta indicada no existe.', connection_not_found: 'La conexión indicada no existe.', invalid_request: 'Revise los campos e inténtelo de nuevo.', origin_or_csrf_rejected: 'La solicitud local no superó la protección de origen.', operation_rejected: 'La operación fue rechazada por una condición de seguridad o estado.', account_scan_failed: 'No se pudo completar el análisis para una cuenta.', button_links_text_too_long: 'El texto con los enlaces de los botones supera el máximo de Instagram (640 caracteres).', follow_gate_invalid: 'La opción «Pedir primero que me sigan» no es válida.', follow_gate_message_invalid: 'Revise el «Mensaje previo»: es obligatorio, de hasta 640 caracteres y solo admite las variables indicadas.', follow_gate_button_title_invalid: 'Revise el «Título del botón»: de 1 a 20 caracteres, sin enlaces ni saltos de línea.', account_adoption_required: 'Esta cuenta pertenecía a una conexión eliminada o desconectada; confirme la adopción para conservar su historial.', follow_gate_retired: FOLLOW_GATE_RETIRED_LABEL, interactive_mode_retired: INTERACTIVE_RETIRED_LABEL, private_reply_not_failed: 'Solo se puede reintentar un mensaje privado que Meta rechazó.', private_reply_window_elapsed: 'Pasaron más de 7 días desde el comentario: Meta ya no permite la respuesta privada.', already_messaged: 'Esta persona ya tiene otro mensaje de esta automatización en la publicación.', ...ATTACHMENT_ERROR_LABELS, ...PLATFORM_ERROR_LABELS, ...DOMAIN_REJECTION_LABELS, ...AI_ERROR_LABELS }; return labels[code] ?? 'Revise el estado de la cuenta y vuelva a intentarlo.'; }
 
 export function ModerationView({ onCelebrate, flagCounts, accountFilter, allAccounts, onSelectAccount, onNavigate, api, act, confirm, mode }: { onCelebrate?: () => void; flagCounts?: Dashboard['moderation']; accountFilter: string; allAccounts: any[]; onSelectAccount: (id: string) => void; onNavigate: (id: string) => void; api: any; act: any; confirm: any; mode: string }) {
   const [settings, setSettings] = useState<any>(null);
