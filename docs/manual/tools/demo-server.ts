@@ -26,7 +26,8 @@ import { createApiHandler } from '../../../src/http/router.ts';
 import { DemoProvider, assertDemoDataDir } from './demo-provider.ts';
 
 const dataDir = assertDemoDataDir(process.env.LOCAL_SOCIAL_DATA_DIR);
-const config = loadConfig({ PORT: process.env.PORT, LOCAL_SOCIAL_DATA_DIR: dataDir }, process.cwd());
+// SOCIAL_DESK_FACEBOOK_PAGES is honoured only here (demo process): it lets the tutorial captures show a fictitious Page.
+const config = loadConfig({ PORT: process.env.PORT, LOCAL_SOCIAL_DATA_DIR: dataDir, SOCIAL_DESK_FACEBOOK_PAGES: process.env.SOCIAL_DESK_FACEBOOK_PAGES }, process.cwd());
 if (config.port === 3000) throw new Error('Refusing to start the demo on port 3000 (reserved for the real app)');
 
 const applicationLock = acquireApplicationLock(config.dataDir);
@@ -35,7 +36,10 @@ migrateDatabase(database);
 // Throwaway vault key generated inside the temp data dir by createVault.
 const vault = createVault(config.dataDir, () => listEncryptedCredentials(database));
 
+const facebookPages = { facebookPagesAvailable: config.facebookPages };
 const provider = new DemoProvider({
+  facebookDiscovery: (connectionId) => config.facebookPages
+    && (database.prepare(`SELECT login_kind AS kind FROM connections WHERE id=?`).get(connectionId) as { kind: string } | undefined)?.kind === 'facebook_login',
   resolveSent: (messageId) => {
     const row = database.prepare(`SELECT q.payload_json AS payload, c.username AS recipient
       FROM send_attempts e JOIN queue_items q ON q.queue_item_id=e.queue_item_id AND q.account_id=e.account_id
@@ -46,10 +50,10 @@ const provider = new DemoProvider({
     return { text: parsed.text ?? '', buttons: parsed.buttons ?? [], recipientId: `demo_user_${row.recipient ?? 'x'}` };
   },
 });
-const queue = new QueueService(database, provider);
-const scanner = new Scanner(database, provider);
-const connections = new ConnectionService(database, vault, provider);
-const scheduler = new Scheduler(database, scanner, queue, { mediaRefresher: connections });
+const queue = new QueueService(database, provider, facebookPages);
+const scanner = new Scanner(database, provider, facebookPages);
+const connections = new ConnectionService(database, vault, provider, facebookPages);
+const scheduler = new Scheduler(database, scanner, queue, { mediaRefresher: connections, ...facebookPages });
 const automations = new AutomationService(database);
 const backlog = new BacklogService(database, scanner, queue);
 const apiHandler = createApiHandler({ database, csrfToken: randomBytes(32).toString('base64url'), connections, automations, scheduler, backlog, queue });

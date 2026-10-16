@@ -23,7 +23,7 @@ test('every step has a unique valid id, a title, instructions and the required f
     assert.match(step.expectedResult, /^Sabrás que está bien cuando/u, where);
     assert.equal(step.screenshot.pending, step.screenshot.file === undefined, `${where}: pending means no file`);
     if (step.screenshot.file) {
-      assert.equal(step.screenshot.file, `/tutorial/${platform}/${step.id}.svg`, where);
+      assert.match(step.screenshot.file, new RegExp(`^/tutorial/${platform}/${step.id}\\.(svg|png|jpg|webp)$`, 'u'), where);
       assert.ok(existsSync(new URL(`../public${step.screenshot.file}`, import.meta.url)), `${where}: file exists under public/`);
     }
     assert.ok(step.screenshot.alt.trim() && step.screenshot.caption.trim(), where);

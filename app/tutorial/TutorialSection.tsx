@@ -5,7 +5,7 @@ import { ArrowLeft, ArrowRight, Check, ChevronDown, Copy, ExternalLink, ImageOff
 import { COMING_SOON_PLATFORMS, PLACEHOLDER_NOTE, TUTORIALS, type TutorialPlatformId, type TutorialStep } from './content';
 import { EMPTY_PROGRESS, type TutorialProgress, goTo, resetPlatform, setAppId } from './progress';
 import { buildHelpPrompt } from './prompt';
-import { advance, copyText, execCommandCopy, externalLinkAttrs, isSchematic, LOGIN_REDIRECT_NOTE, parseAppIdInput, progressSummary, resolveLink, SCHEMATIC_NOTE, screenshotView, startIndex, stepStatus } from './view';
+import { advance, CAPTURE_NOTE, copyText, execCommandCopy, externalLinkAttrs, isCapture, isSchematic, LOGIN_REDIRECT_NOTE, parseAppIdInput, progressSummary, resolveLink, SCHEMATIC_NOTE, screenshotView, startIndex, stepStatus } from './view';
 
 type Api = (path: string, method?: string, body?: Record<string, unknown>) => Promise<any>;
 type Confirm = (options: { title: string; body: string; confirmLabel: string; danger?: boolean }) => Promise<boolean>;
@@ -205,6 +205,6 @@ export function TutorialSection({ api, confirm }: { api: Api; confirm: Confirm }
 function TutorialScreenshot({ step }: { step: TutorialStep }) {
   const view = screenshotView(step.screenshot);
   return view.kind === 'image'
-    ? <figure className="tutorial-shot"><img src={view.src} alt={view.alt} loading="lazy" /><figcaption>{view.caption}{isSchematic(view.src) && <span className="tutorial-shot-note"> {SCHEMATIC_NOTE}</span>}</figcaption></figure>
+    ? <figure className="tutorial-shot"><img src={view.src} alt={view.alt} loading="lazy" /><figcaption>{view.caption}{isSchematic(view.src) && <span className="tutorial-shot-note"> {SCHEMATIC_NOTE}</span>}{isCapture(view.src) && <span className="tutorial-shot-note"> {CAPTURE_NOTE}.</span>}</figcaption></figure>
     : <figure className="tutorial-shot placeholder"><div role="img" aria-label={`${view.label}: ${step.screenshot.alt}`}><ImageOff size={20} aria-hidden="true" /><strong>{view.label}</strong></div><figcaption>{view.caption}</figcaption></figure>;
 }

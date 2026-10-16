@@ -14,7 +14,8 @@ export const APP_ID_PLACEHOLDER = '{APP_ID}';
 export type TutorialScreenshot = {
   /**
    * Path under public/ served by Next, `/tutorial/<platform>/<step-id>.svg` for an original schematic
-   * (or .png/.jpg/.webp for a real screenshot, only after redaction and human approval); absent while pending.
+   * (or .png/.jpg/.webp for a real screenshot of this program's own screens, generated on the demo data by
+   * docs/manual/tools/capture-tutorial.mjs); absent while pending.
    */
   file?: string;
   alt: string;
@@ -88,7 +89,8 @@ export const SAFETY_RULES: ReadonlyArray<string> = [
 
 export const PLACEHOLDER_NOTE = 'Antes de pegar el prompt, reemplaza cada texto [REEMPLAZA: …] por tu información. Nunca pegues tokens, secretos de la app ni contraseñas.';
 
-const pending = (alt: string, caption: string): TutorialScreenshot => ({ alt, caption, pending: true });
+/** Real screenshot of this program's own screen on the demo data, at public/tutorial/<platform>/<step-id>.png (numbered callouts). */
+const capture = (platform: TutorialPlatformId, id: string, alt: string, caption: string): TutorialScreenshot => ({ file: `/tutorial/${platform}/${id}.png`, alt, caption, pending: false });
 /** Original schematic at public/tutorial/<platform>/<step-id>.svg (not a real screenshot). */
 const schematic = (platform: TutorialPlatformId, id: string, alt: string, caption: string): TutorialScreenshot => ({ file: `/tutorial/${platform}/${id}.svg`, alt, caption, pending: false });
 const GRAPH_EXPLORER: TutorialLink = { label: 'Explorador de la API Graph', url: 'https://developers.facebook.com/tools/explorer/' };
@@ -308,7 +310,7 @@ const instagramSteps = build([
     links: [],
     notes: ['Nunca pegues aquí el secreto de la app.'],
     expectedResult: 'Sabrás que está bien cuando veas «Conexión guardada» y la conexión aparezca en la lista como «Sin validar».',
-    screenshot: schematic('instagram', 'pegar-token', 'Esquema del formulario Nueva conexión del programa', 'Formulario «Nueva conexión» (sin mostrar ningún token).'),
+    screenshot: capture('instagram', 'pegar-token', 'Formulario «Nueva conexión» del programa con tres marcas numeradas: 1, el selector «Tipo de acceso» con Instagram Login; 2, el campo «Token de acceso · solo captura» (oculto); 3, el botón «Guardar conexión cifrada».', 'Marcas: 1 Tipo de acceso, 2 Token de acceso (oculto), 3 Guardar conexión cifrada.'),
     goal: 'guardar mi token de Instagram en mi programa local, en el formulario «Nueva conexión».',
   },
   {
@@ -324,7 +326,7 @@ const instagramSteps = build([
     links: [],
     notes: ['Si falla, la conexión aparece como «Token inválido»: revisa que el token esté completo, no haya vencido y tenga los permisos del paso 6.', 'Si tu cuenta no aparece, revisa que sea profesional, que haya aceptado la invitación de probador y que iniciaste sesión con la cuenta de Instagram correcta.'],
     expectedResult: 'Sabrás que está bien cuando tu cuenta aparezca en «Cuentas seleccionadas».',
-    screenshot: schematic('instagram', 'probar-descubrir', 'Esquema de Conexiones con Probar y descubrir y Seleccionar', 'Cuenta descubierta con el botón «Seleccionar».'),
+    screenshot: capture('instagram', 'probar-descubrir', 'Pantalla Conexiones con dos marcas numeradas: 1, el botón «Probar y descubrir» de la conexión; 2, el botón «Seleccionar» de una cuenta en «Cuentas descubiertas».', 'Marcas: 1 Probar y descubrir, 2 Seleccionar en la cuenta descubierta.'),
     goal: 'validar mi conexión con el botón «Probar y descubrir» y seleccionar mi cuenta de Instagram.',
   },
   {
@@ -341,7 +343,7 @@ const instagramSteps = build([
     links: [],
     notes: ['El programa empieza en Dry Run: nada se envía hasta que lo autorices de forma explícita.', 'Meta permite una respuesta privada por persona y solo dentro de 7 días del comentario.'],
     expectedResult: 'Sabrás que está bien cuando el análisis termine con un resumen de comentarios leídos y sin errores.',
-    screenshot: pending('Resumen del análisis terminado en la pantalla Revisión pendiente del programa', 'Resumen de un análisis terminado.'),
+    screenshot: capture('instagram', 'comprobar-revision', 'Pantalla Revisión pendiente con cuatro marcas numeradas: 1, la lista «Ventana»; 2, el botón «Iniciar análisis»; 3, el resumen «Análisis finalizado» con los comentarios leídos; 4, el contador de comentarios pendientes.', 'Marcas: 1 Ventana, 2 Iniciar análisis, 3 Resumen del análisis, 4 Comentarios pendientes.'),
     goal: 'comprobar con «Revisión pendiente» que mi programa lee los comentarios de mi cuenta sin enviar nada.',
   },
   confirmAccountStep('instagram'),
@@ -359,7 +361,7 @@ const facebookSteps = build([
     links: [],
     notes: ['La compatibilidad con Páginas es experimental y está apagada por defecto (ver el paso 9).', 'Con un token de usuario, los datos de los comentarios pueden llegar vacíos: el programa usa el token de la Página, que descubre solo.'],
     expectedResult: 'Sabrás que está bien cuando puedas administrar la Página con tu usuario de Facebook.',
-    screenshot: pending('Pantalla de roles y acceso de la Página de Facebook con control total', 'Acceso a la Página con control total.'),
+    screenshot: schematic('facebook', 'requisitos', 'Esquema de lo que necesitas: tu usuario de Facebook con control total de tu Página (1), y teléfono y correo a mano para los códigos de verificación (2). Debajo, lo que se crea en los pasos siguientes.', 'Marcas: 1 Página con control total (o tareas Mensajes y Moderar), 2 teléfono y correo a mano.'),
     goal: 'comprobar que administro mi Página de Facebook con control total, o al menos con las tareas Mensajes y Moderar.',
   },
   developerAccountSteps('facebook'),
@@ -475,7 +477,7 @@ const facebookSteps = build([
     links: [],
     notes: ['Esto reinicia la aplicación: el Monitoreo se apaga en cada arranque.'],
     expectedResult: 'Sabrás que está bien cuando, al probar la conexión del siguiente paso, aparezcan Páginas con la insignia «Facebook».',
-    screenshot: pending('Terminal de PowerShell con la variable de entorno SOCIAL_DESK_FACEBOOK_PAGES activada antes de iniciar el programa', 'Inicio con la variable activada.'),
+    screenshot: schematic('facebook', 'activar-paginas', 'Esquema de una terminal con el comando que inicia el programa con SOCIAL_DESK_FACEBOOK_PAGES=1, en PowerShell y en bash, y los tres pasos: detener, iniciar con la variable y abrir de nuevo el programa.', 'Marcas: 1 detener el programa, 2 iniciarlo con la variable (según tu sistema), 3 abrirlo de nuevo.'),
     goal: 'iniciar mi programa local con la compatibilidad de Páginas de Facebook activada mediante una variable de entorno.',
   },
   {
@@ -494,7 +496,7 @@ const facebookSteps = build([
       'Una conexión queda atada a la identidad de su primer token. Si guardaste un token de Página y quieres usar uno de usuario, al editarla verás el error connection_identity_mismatch: elimina la conexión y crea una nueva.',
     ],
     expectedResult: 'Sabrás que está bien cuando veas «Conexión guardada» y la conexión aparezca como «Sin validar».',
-    screenshot: schematic('facebook', 'pegar-token', 'Esquema del formulario Nueva conexión con el tipo de acceso Facebook Login', 'Formulario «Nueva conexión» (sin mostrar ningún token).'),
+    screenshot: capture('facebook', 'pegar-token', 'Formulario «Nueva conexión» con cuatro marcas numeradas: 1, el selector «Tipo de acceso» con Facebook Login; 2, el campo «Token de acceso · solo captura» (oculto); 3, el recuadro de ayuda de Facebook Login que menciona SOCIAL_DESK_FACEBOOK_PAGES=1; 4, el botón «Guardar conexión cifrada».', 'Marcas: 1 Tipo de acceso, 2 Token de acceso (oculto), 3 Ayuda de Facebook Login, 4 Guardar conexión cifrada.'),
     goal: 'guardar mi token de usuario de Facebook en mi programa local, en el formulario «Nueva conexión».',
   },
   {
@@ -511,7 +513,7 @@ const facebookSteps = build([
     links: [],
     notes: ['Si tu Página no aparece, revisa que la marcaste en el diálogo del paso 7 y que el token tiene los cuatro permisos.', 'Si un permiso de Página no está en la Página (tareas Moderar y Mensajes), Meta devolverá datos vacíos o rechazará la acción.'],
     expectedResult: 'Sabrás que está bien cuando tu Página aparezca en «Cuentas seleccionadas».',
-    screenshot: schematic('facebook', 'probar-seleccionar', 'Esquema de Conexiones con Probar y descubrir y Seleccionar para una Página', 'Página descubierta con el botón «Seleccionar».'),
+    screenshot: capture('facebook', 'probar-seleccionar', 'Pantalla Conexiones con dos marcas numeradas: 1, el botón «Probar y descubrir» de la conexión de Facebook Login; 2, el botón «Seleccionar» de una Página con la insignia Facebook en «Cuentas descubiertas». Debajo aparece la cuenta de Instagram vinculada.', 'Marcas: 1 Probar y descubrir, 2 Seleccionar en la Página (insignia Facebook).'),
     goal: 'validar mi conexión con el botón «Probar y descubrir» y seleccionar mi Página de Facebook.',
   },
   {
@@ -528,7 +530,7 @@ const facebookSteps = build([
     links: [FB_PRIVATE_REPLIES],
     notes: ['Facebook no permite verificar el mensaje enviado: se confirma con la respuesta de Meta.'],
     expectedResult: 'Sabrás que está bien cuando entiendas qué hace y qué no hace el programa con tu Página.',
-    screenshot: pending('Sin captura necesaria: este paso es informativo', 'Este paso es informativo.'),
+    screenshot: schematic('facebook', 'limitaciones', 'Resumen en dos columnas: qué funciona hoy con las Páginas (respuesta privada, botones como texto, comentarios sin nombre) y qué todavía no hay (respuesta pública, moderación, ocultar o borrar, lectura verificada).', 'Resumen: qué funciona hoy y qué todavía no hay con las Páginas de Facebook.'),
     goal: 'entender las limitaciones de mi programa local con las Páginas de Facebook.',
   },
   confirmAccountStep('facebook'),

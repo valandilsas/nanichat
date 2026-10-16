@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { EMPTY_PROGRESS, goTo, markCompleted } from '../app/tutorial/progress';
 import { TUTORIALS } from '../app/tutorial/content';
-import { APP_ID_HINT, LOGIN_REDIRECT_NOTE, advance, clampStep, copyText, externalLinkAttrs, isSchematic, parseAppIdInput, progressSummary, resolveLink, screenshotView, SCHEMATIC_NOTE, startIndex, stepLabel, stepStatus } from '../app/tutorial/view';
+import { APP_ID_HINT, CAPTURE_NOTE, isCapture, LOGIN_REDIRECT_NOTE, advance, clampStep, copyText, externalLinkAttrs, isSchematic, parseAppIdInput, progressSummary, resolveLink, screenshotView, SCHEMATIC_NOTE, startIndex, stepLabel, stepStatus } from '../app/tutorial/view';
 
 const steps = TUTORIALS.instagram.steps;
 
@@ -113,4 +113,14 @@ test('parseAppIdInput trims, accepts 8-20 digits, treats blank as clearing and f
   assert.deepEqual(parseAppIdInput(''), { kind: 'empty' });
   assert.deepEqual(parseAppIdInput('   '), { kind: 'empty' });
   for (const bad of ['123', 'abc', '1234567x', '1'.repeat(21), 'https://developers.facebook.com/apps/1234567890123/']) assert.deepEqual(parseAppIdInput(bad), { kind: 'invalid' }, bad);
+});
+
+test('real in-app captures (png/jpg/webp) are told apart from schematics and carry their own note', () => {
+  assert.equal(CAPTURE_NOTE, 'Captura de ejemplo con datos ficticios de tu programa');
+  for (const file of ['/tutorial/instagram/pegar-token.png', '/tutorial/facebook/probar-seleccionar.jpg', '/tutorial/x/y.webp']) {
+    assert.equal(isCapture(file), true, file);
+    assert.equal(isSchematic(file), false, file);
+  }
+  assert.equal(isCapture('/tutorial/facebook/crear-app.svg'), false);
+  assert.doesNotMatch(CAPTURE_NOTE, /Esquema/u);
 });

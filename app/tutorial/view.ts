@@ -48,6 +48,13 @@ export type ScreenshotView =
 
 export const SCHEMATIC_NOTE = 'Esquema ilustrativo, no es una captura real. Tu pantalla puede verse distinta.';
 
+export const CAPTURE_NOTE = 'Captura de ejemplo con datos ficticios de tu programa';
+
+/** True for a real screenshot of this program's own screens (png/jpg/webp), always taken on the demo data. */
+export function isCapture(src: string): boolean {
+  return /\.(png|jpe?g|webp)$/u.test(src);
+}
+
 /** True for the original SVG schematics (as opposed to a real, redacted screenshot). */
 export function isSchematic(src: string): boolean {
   return src.endsWith('.svg');

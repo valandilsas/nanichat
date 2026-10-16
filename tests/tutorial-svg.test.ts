@@ -5,7 +5,10 @@ import { TUTORIALS } from '../app/tutorial/content.ts';
 
 const publicDir = new URL('../public/tutorial/', import.meta.url);
 const all = Object.values(TUTORIALS).flatMap((platform) => platform.steps.map((step) => ({ platform: platform.id, step })));
-const withSvg = all.filter(({ step }) => step.screenshot.file);
+const withImage = all.filter(({ step }) => step.screenshot.file);
+const withSvg = withImage.filter(({ step }) => step.screenshot.file!.endsWith('.svg'));
+const withPng = withImage.filter(({ step }) => step.screenshot.file!.endsWith('.png'));
+export const MAX_PNG_BYTES = 400 * 1024;
 const readSvg = (file: string) => readFileSync(new URL(`../public${file}`, import.meta.url), 'utf8');
 
 /** Tiny well-formedness check: balanced, properly nested tags; no DOCTYPE/ENTITY tricks. */
@@ -36,10 +39,35 @@ test('the well-formedness helper accepts valid markup and rejects broken markup'
   assert.ok(checkWellFormed('<!DOCTYPE svg><svg/>'));
 });
 
-test('illustrations exist for most steps and only the planned steps stay pending', () => {
-  assert.ok(withSvg.length >= 18, `only ${withSvg.length} steps have an illustration`);
-  const pending = all.filter(({ step }) => !step.screenshot.file).map(({ platform, step }) => `${platform}/${step.id}`).sort();
-  assert.deepEqual(pending, ['facebook/activar-paginas', 'facebook/limitaciones', 'facebook/requisitos', 'instagram/comprobar-revision']);
+test('every step has an image: real captures for in-app steps, schematics for the Meta panel and informative steps', () => {
+  const pending = all.filter(({ step }) => !step.screenshot.file).map(({ platform, step }) => `${platform}/${step.id}`);
+  assert.deepEqual(pending, []);
+  assert.deepEqual(withPng.map(({ platform, step }) => `${platform}/${step.id}`).sort(), [
+    'facebook/pegar-token', 'facebook/probar-seleccionar', 'instagram/comprobar-revision', 'instagram/pegar-token', 'instagram/probar-descubrir',
+  ]);
+  for (const { platform, step } of all) {
+    assert.equal(step.screenshot.pending, false, `${platform}/${step.id}`);
+  }
+  for (const id of ['requisitos', 'activar-paginas', 'limitaciones']) {
+    assert.match(TUTORIALS.facebook.steps.find((step) => step.id === id)!.screenshot.file!, /\.svg$/u, `facebook/${id}`);
+  }
+});
+
+test('every PNG exists, is small, has a valid PNG signature and sane dimensions', () => {
+  for (const { platform, step } of withPng) {
+    const where = `${platform}/${step.id}`;
+    const url = new URL(`../public${step.screenshot.file}`, import.meta.url);
+    assert.ok(existsSync(url), `${where}: exists`);
+    const bytes = readFileSync(url);
+    assert.ok(bytes.length > 2_000, `${where}: not empty`);
+    assert.ok(bytes.length <= MAX_PNG_BYTES, `${where}: ${bytes.length} bytes exceeds the cap`);
+    assert.deepEqual([...bytes.subarray(0, 8)], [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a], `${where}: PNG signature`);
+    assert.equal(bytes.subarray(12, 16).toString('ascii'), 'IHDR', where);
+    const width = bytes.readUInt32BE(16);
+    const height = bytes.readUInt32BE(20);
+    assert.ok(width >= 400 && width <= 2400 && height >= 200 && height <= 2400, `${where}: ${width}x${height}`);
+    assert.match(step.screenshot.alt, /\b\d\b|numerad|marca/iu, `${where}: alt explains the numbered callouts`);
+  }
 });
 
 test('every SVG is well-formed, self-contained, accessible, labelled and free of personal data', () => {
@@ -69,12 +97,12 @@ test('every SVG is well-formed, self-contained, accessible, labelled and free of
   }
 });
 
-test('public/tutorial contains only referenced SVG files (no orphans, no other formats)', () => {
+test('public/tutorial contains only referenced svg/png files (no orphans, no other formats)', () => {
   assert.ok(existsSync(publicDir));
-  const referenced = new Set(withSvg.map(({ step }) => step.screenshot.file));
+  const referenced = new Set(withImage.map(({ step }) => step.screenshot.file));
   for (const platform of readdirSync(publicDir)) {
     for (const file of readdirSync(new URL(`${platform}/`, publicDir))) {
-      assert.match(file, /\.svg$/u, `${platform}/${file}`);
+      assert.match(file, /\.(svg|png)$/u, `${platform}/${file}`);
       assert.ok(referenced.has(`/tutorial/${platform}/${file}`), `orphan ${platform}/${file}`);
     }
   }

@@ -32,6 +32,15 @@ export const DEMO_ACCOUNTS: DiscoveredAccount[] = [
   { providerAccountId: '17841400000000002', username: 'tu_otra_cuenta', displayName: 'Tu otra cuenta (demo)', accountType: 'BUSINESS', capabilities: ['identity_read', 'private_reply_unverified'] },
 ];
 
+/**
+ * Fictitious Facebook Login discovery for the tutorial captures: one Page plus the Instagram account linked to it.
+ * Only returned when the demo server runs with SOCIAL_DESK_FACEBOOK_PAGES=1 and the connection is Facebook Login.
+ */
+export const DEMO_FACEBOOK_ACCOUNTS: DiscoveredAccount[] = [
+  { providerAccountId: '100000000000001', username: 'Tu Página de ejemplo', displayName: 'Tu Página de ejemplo', accountType: 'PAGE', relatedPageId: '100000000000001', platform: 'facebook', capabilities: ['identity_read', 'page_task:MODERATE', 'page_task:MESSAGING'] },
+  { providerAccountId: '17841400000000001', username: 'tu_cuenta', displayName: 'Tu cuenta (demo)', accountType: 'BUSINESS', relatedPageId: '100000000000001', capabilities: ['identity_read', 'private_reply_unverified'] },
+];
+
 const HOUR = 3_600_000;
 const DAY = 24 * HOUR;
 const PAGE_SIZE = 4;
@@ -138,6 +147,8 @@ export type DemoProviderOptions = {
   speed?: number;
   /** Looks up a message accepted earlier (from the local DB) so readMessage can confirm it. */
   resolveSent?: (messageId: string) => DemoSentMessage | undefined;
+  /** True when this connection id is a Facebook Login connection AND Page support is enabled in the demo process. */
+  facebookDiscovery?: (connectionId: string) => boolean;
   /** Fixed "now" for deterministic timestamps; defaults to Date.now() at construction. */
   now?: number;
 };
@@ -174,6 +185,7 @@ export class DemoProvider implements SocialProvider {
 
   async discoverAccounts(_connectionId: string): Promise<DiscoveredAccount[]> {
     await this.pause(500);
+    if (this.options.facebookDiscovery?.(_connectionId)) return DEMO_FACEBOOK_ACCOUNTS.map((account) => ({ ...account, capabilities: [...account.capabilities] }));
     return DEMO_ACCOUNTS.map((account) => ({ ...account, capabilities: [...account.capabilities] }));
   }
 
