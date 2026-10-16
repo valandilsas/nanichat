@@ -3,8 +3,9 @@
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ArrowLeft, ArrowRight, Check, ChevronDown, Copy, ExternalLink, ImageOff, RotateCcw, ShieldAlert } from 'lucide-react';
 import { COMING_SOON_PLATFORMS, PLACEHOLDER_NOTE, TUTORIALS, type TutorialPlatformId, type TutorialStep } from './content';
-import { EMPTY_PROGRESS, type TutorialProgress, goTo, resetPlatform } from './progress';
-import { advance, copyText, execCommandCopy, externalLinkAttrs, isSchematic, progressSummary, SCHEMATIC_NOTE, screenshotView, startIndex, stepStatus } from './view';
+import { EMPTY_PROGRESS, type TutorialProgress, goTo, resetPlatform, setAppId } from './progress';
+import { buildHelpPrompt } from './prompt';
+import { advance, copyText, execCommandCopy, externalLinkAttrs, isSchematic, LOGIN_REDIRECT_NOTE, parseAppIdInput, progressSummary, resolveLink, SCHEMATIC_NOTE, screenshotView, startIndex, stepStatus } from './view';
 
 type Api = (path: string, method?: string, body?: Record<string, unknown>) => Promise<any>;
 type Confirm = (options: { title: string; body: string; confirmLabel: string; danger?: boolean }) => Promise<boolean>;
@@ -22,6 +23,8 @@ export function TutorialSection({ api, confirm }: { api: Api; confirm: Confirm }
   const [platform, setPlatform] = useState<TutorialPlatformId | null>(null);
   const [index, setIndex] = useState(0);
   const [promptOpen, setPromptOpen] = useState(false);
+  const [appIdDraft, setAppIdDraft] = useState('');
+  const [appIdInvalid, setAppIdInvalid] = useState(false);
   const [copyState, setCopyState] = useState<'idle' | 'copied' | 'failed'>('idle');
   const progressRef = useRef(progress);
   const saveChain = useRef<Promise<unknown>>(Promise.resolve());
@@ -30,6 +33,8 @@ export function TutorialSection({ api, confirm }: { api: Api; confirm: Confirm }
 
   useEffect(() => { progressRef.current = progress; }, [progress]);
   useEffect(() => () => clearTimeout(copyTimer.current), []);
+  // Keeps the field in sync with the saved App ID (typing an incomplete value never touches the saved one).
+  useEffect(() => { setAppIdDraft(progress.appId ?? ''); }, [progress.appId]);
 
   // Load once on open; any failure falls back to an empty (local) progress and never blocks the tutorial.
   useEffect(() => {
@@ -96,6 +101,15 @@ export function TutorialSection({ api, confirm }: { api: Api; confirm: Confirm }
     copyTimer.current = setTimeout(() => setCopyState('idle'), 2500);
   }
 
+  function changeAppId(text: string) {
+    setAppIdDraft(text);
+    setAppIdInvalid(false);
+    const parsed = parseAppIdInput(text);
+    if (parsed.kind === 'valid') commit(setAppId(progressRef.current, parsed.value));
+    else if (parsed.kind === 'empty' && progressRef.current.appId) commit(setAppId(progressRef.current, ''));
+  }
+
+  const promptText = platform && step && promptOpen ? buildHelpPrompt(platform, step, index, steps.length, progress.appId) : '';
   const summary = useMemo(() => platform ? progressSummary(progress, platform, steps, index) : null, [progress, platform, steps, index]);
 
   return <section className="tutorial-block" aria-labelledby="tutorial-title">
@@ -122,6 +136,14 @@ export function TutorialSection({ api, confirm }: { api: Api; confirm: Confirm }
         <button type="button" className="btn small" onClick={() => setPlatform(null)}><ArrowLeft size={14} aria-hidden="true" /> Volver a las plataformas</button>
         <button type="button" className="btn small ghost" onClick={() => void reset()}><RotateCcw size={14} aria-hidden="true" /> Reiniciar progreso</button>
       </div>
+      <div className="tutorial-appid">
+        <label htmlFor="tutorial-app-id"><strong>Tu ID de app</strong> <span className="muted">(opcional)</span></label>
+        <input id="tutorial-app-id" type="text" inputMode="numeric" autoComplete="off" spellCheck={false} maxLength={40} placeholder="Número de 8 a 20 dígitos" value={appIdDraft}
+          aria-invalid={appIdInvalid} aria-describedby="tutorial-app-id-help" onChange={(event) => changeAppId(event.target.value)} onBlur={() => setAppIdInvalid(parseAppIdInput(appIdDraft).kind === 'invalid')} />
+        <p id="tutorial-app-id-help" className={appIdInvalid ? 'hint tutorial-warning' : 'hint'} role={appIdInvalid ? 'alert' : undefined}>
+          {appIdInvalid ? 'El ID de app solo lleva números (de 8 a 20 dígitos). No se guardó.' : 'Lo verás en la dirección de tu app (developers.facebook.com/apps/NÚMERO/). No es un secreto; sirve para abrir enlaces directos a tu app. Nunca escribas aquí un token ni el secreto de la app.'}
+        </p>
+      </div>
       <div className="tutorial-progress">
         <div className="tutorial-progress-text"><strong>{TUTORIALS[platform!].label} · {summary.label}</strong><span className="muted">{summary.percent}% completado · {summary.completedCount} de {steps.length} pasos hechos</span></div>
         <div className="tutorial-bar" role="progressbar" aria-label={`Progreso del tutorial de ${TUTORIALS[platform!].label}`} aria-valuemin={0} aria-valuemax={100} aria-valuenow={summary.percent}><span style={{ width: `${summary.percent}%` }} /></div>
@@ -146,7 +168,15 @@ export function TutorialSection({ api, confirm }: { api: Api; confirm: Confirm }
           <div className="tutorial-why"><strong>Por qué importa</strong><p>{step.whyItMatters}</p></div>
           <h5>Qué hacer</h5>
           <ol className="tutorial-instructions">{step.instructions.map((line) => <li key={line}>{line}</li>)}</ol>
-          {step.links.length > 0 && <div className="tutorial-links">{step.links.map((link) => <a key={link.url} className="btn small" href={link.url} {...externalLinkAttrs()}><ExternalLink size={13} aria-hidden="true" /> {link.label}<span className="sr-only"> (se abre en una pestaña nueva)</span></a>)}</div>}
+          {step.links.length > 0 && <div className="tutorial-links-block">
+            <div className="tutorial-links">{step.links.map((link) => {
+              const resolved = resolveLink(link, progress.appId);
+              return resolved.href
+                ? <a key={link.url} className="btn small" href={resolved.href} {...externalLinkAttrs()}><ExternalLink size={13} aria-hidden="true" /> {resolved.label}<span className="sr-only"> (se abre en una pestaña nueva)</span></a>
+                : <span key={link.url} className="tutorial-link-disabled"><span className="btn small disabled" aria-disabled="true"><ExternalLink size={13} aria-hidden="true" /> {resolved.label}</span><span className="hint">{resolved.hint}</span></span>;
+            })}</div>
+            <p className="hint">{LOGIN_REDIRECT_NOTE}</p>
+          </div>}
           {step.notes.length > 0 && <div className="tutorial-notes" role="note">{step.notes.map((note) => <p key={note}><ShieldAlert size={14} aria-hidden="true" /> <span>{note}</span></p>)}</div>}
           <p className="tutorial-expected"><Check size={14} aria-hidden="true" /> {step.expectedResult}</p>
           <TutorialScreenshot step={step} />
@@ -154,9 +184,9 @@ export function TutorialSection({ api, confirm }: { api: Api; confirm: Confirm }
             <button type="button" className="btn small" aria-expanded={promptOpen} aria-controls="tutorial-help-panel" onClick={() => setPromptOpen((value) => !value)}><ChevronDown size={14} aria-hidden="true" className={promptOpen ? 'tutorial-chevron open' : 'tutorial-chevron'} /> Prompt de ayuda</button>
             {promptOpen && <div id="tutorial-help-panel" className="tutorial-help-panel">
               <p className="hint">Pegue este texto en cualquier asistente de IA si se atasca. {PLACEHOLDER_NOTE}</p>
-              <textarea readOnly rows={12} value={step.helpPrompt} aria-label="Prompt de ayuda para este paso" onFocus={(event) => event.currentTarget.select()} />
+              <textarea readOnly rows={12} value={promptText} aria-label="Prompt de ayuda para este paso" onFocus={(event) => event.currentTarget.select()} />
               <div className="tutorial-help-actions">
-                <button type="button" className="btn-main small" onClick={() => void copyPrompt(step.helpPrompt)}><Copy size={14} aria-hidden="true" /> Copiar prompt</button>
+                <button type="button" className="btn-main small" onClick={() => void copyPrompt(promptText)}><Copy size={14} aria-hidden="true" /> Copiar prompt</button>
                 <span role="status" aria-live="polite" className="hint">{copyState === 'copied' ? 'Copiado' : copyState === 'failed' ? 'No se pudo copiar; seleccione el texto y cópielo a mano.' : ''}</span>
               </div>
             </div>}

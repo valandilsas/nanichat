@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { existsSync } from 'node:fs';
 import test from 'node:test';
-import { ALLOWED_LINK_HOSTS, COMING_SOON_PLATFORMS, SAFETY_RULES, TUTORIALS } from '../app/tutorial/content.ts';
+import { ALLOWED_LINK_HOSTS, APP_ID_PLACEHOLDER, COMING_SOON_PLATFORMS, DEEP_LINK_PATTERNS, TUTORIALS, VERIFIED_STATIC_URLS } from '../app/tutorial/content.ts';
 
 const all = Object.values(TUTORIALS).flatMap((platform) => platform.steps.map((step) => ({ platform: platform.id, step })));
 
@@ -32,31 +32,67 @@ test('every step has a unique valid id, a title, instructions and the required f
   }
 });
 
-test('every help prompt is copy-paste ready: header, placeholders and the mandatory safety rules', () => {
+test('steps carry the data the prompt generator needs and no static help prompt', () => {
   for (const { platform, step } of all) {
     const where = `${platform}/${step.id}`;
-    assert.match(step.helpPrompt, /\[REEMPLAZA: [^\]]+\]/u, where);
-    assert.match(step.helpPrompt, /Paso \d+ de \d+ del tutorial de (Instagram|Facebook)/u, where);
-    assert.ok(step.helpPrompt.includes(step.title), where);
-    for (const rule of SAFETY_RULES) assert.ok(step.helpPrompt.includes(rule), `${where}: ${rule.slice(0, 30)}`);
-    assert.match(step.helpPrompt, /Nunca me pidas ni aceptes tokens/u, where);
-    assert.match(step.helpPrompt, /documentación oficial de Meta/u, where);
-    assert.match(step.helpPrompt, /un solo paso a la vez/u, where);
+    assert.ok(step.goal.trim().endsWith('.'), `${where}: goal is a sentence`);
+    assert.equal('helpPrompt' in step, false, where);
   }
 });
 
-test('all links are https, on an official host, without credentials, query strings or duplicates per step', () => {
+const DUMMY_APP_ID = '1234567890123';
+const fill = (url: string) => url.split(APP_ID_PLACEHOLDER).join(DUMMY_APP_ID);
+
+test('all links are https, on an official host, without credentials or fragments, and unique per step', () => {
   for (const { platform, step } of all) {
     const urls = step.links.map((link) => link.url);
     assert.equal(new Set(urls).size, urls.length, `${platform}/${step.id} duplicate links`);
     for (const link of step.links) {
       assert.ok(link.label.trim());
-      const url = new URL(link.url);
+      const url = new URL(fill(link.url));
       assert.equal(url.protocol, 'https:', link.url);
       assert.ok(ALLOWED_LINK_HOSTS.includes(url.hostname), link.url);
-      assert.equal(url.username + url.password + url.search + url.hash, '', link.url);
+      assert.equal(url.username + url.password + url.hash, '', link.url);
+      // Query strings only exist on the observed deep links.
+      if (url.search) assert.ok(DEEP_LINK_PATTERNS.includes(link.url), `${link.url} has a query but is not a known deep link`);
     }
   }
+});
+
+test('links are limited to the verified roots, canonical /documentation/ pages and the observed App-ID deep links', () => {
+  assert.equal(DEEP_LINK_PATTERNS.length, 4);
+  for (const pattern of DEEP_LINK_PATTERNS) assert.ok(pattern.startsWith(`https://developers.facebook.com/apps/${APP_ID_PLACEHOLDER}/`), pattern);
+  for (const { platform, step } of all) {
+    for (const link of step.links) {
+      const where = `${platform}/${step.id}: ${link.url}`;
+      if (link.url.includes(APP_ID_PLACEHOLDER)) assert.ok(DEEP_LINK_PATTERNS.includes(link.url), where);
+      else assert.ok(VERIFIED_STATIC_URLS.includes(link.url), where);
+      // Meta moved its docs: only the explorer guide is still served from /docs/.
+      if (link.url.includes('/docs/')) assert.equal(link.url, 'https://developers.facebook.com/docs/graph-api/guides/explorer', where);
+      assert.doesNotMatch(link.url, /async\/registration|get-started/u, where);
+    }
+  }
+  for (const url of VERIFIED_STATIC_URLS) assert.ok(all.some(({ step }) => step.links.some((link) => link.url === url)), `${url} is used by some step`);
+  for (const url of DEEP_LINK_PATTERNS) assert.ok(all.some(({ step }) => step.links.some((link) => link.url === url)), `${url} is used by some step`);
+});
+
+test('a step with an App-ID deep link also offers the root panel link as fallback', () => {
+  const withDeep = all.filter(({ step }) => step.links.some((link) => link.url.includes(APP_ID_PLACEHOLDER)));
+  assert.ok(withDeep.length >= 4);
+  for (const { platform, step } of withDeep) assert.ok(step.links.some((link) => link.url === 'https://developers.facebook.com/apps/'), `${platform}/${step.id}`);
+});
+
+test('help-site links are labelled as unverified menus', () => {
+  const helpLinks = all.flatMap(({ step }) => step.links).filter((link) => /help\.instagram\.com|facebook\.com\/business\/help/u.test(link.url));
+  assert.ok(helpLinks.length >= 2);
+  for (const link of helpLinks) assert.match(link.label, /por verificar el menú/u);
+});
+
+test('the Instagram documentation link has its section label and the token debugger is offered for Facebook tokens', () => {
+  const links = all.flatMap(({ step }) => step.links);
+  assert.ok(links.some((link) => link.url === 'https://developers.facebook.com/documentation/instagram-platform/instagram-api-with-instagram-login/' && link.label === 'Documentación de Instagram API con Instagram Login'));
+  const explorerStep = TUTORIALS.facebook.steps.find((step) => step.id === 'generar-token-usuario')!;
+  assert.ok(explorerStep.links.some((link) => link.url === 'https://developers.facebook.com/tools/debug/accesstoken/' && /Revisa tu token/u.test(link.label)));
 });
 
 test('content carries no real-looking tokens, long numeric ids, emails or secrets', () => {
@@ -106,12 +142,25 @@ test('steps from the research that rest on inferences or unknown labels are flag
   for (const id of ['instagram/requisitos', 'instagram/agregar-probador', 'instagram/generar-token', 'facebook/portafolio-comercial']) assert.ok(unverified.has(id), id);
 });
 
-test('links only use documentation URLs verified by the research (no /documentation/ guesses)', () => {
-  for (const { platform, step } of all) {
-    for (const link of step.links) {
-      assert.doesNotMatch(link.url, /\/documentation\//u, `${platform}/${step.id}`);
-      assert.doesNotMatch(link.url, /async\/registration/u, `${platform}/${step.id}`);
-    }
+test('the Facebook steps carry the live-observed Explorer, pop-up, selector and identity facts', () => {
+  const token = JSON.stringify(TUTORIALS.facebook.steps.find((step) => step.id === 'generar-token-usuario'));
+  for (const text of ['App de Meta', 'Usuario o página', 'Obtener token de acceso de usuario', 'Agregar un permiso', 'opciones seleccionadas', 'Generate Access Token', 'ventana aparte', 'ventanas emergentes', 'Token del usuario', 'alrededor de una hora']) assert.ok(token.includes(text), text);
+  const paste = JSON.stringify(TUTORIALS.facebook.steps.find((step) => step.id === 'pegar-token'));
+  assert.match(paste, /connection_identity_mismatch/u);
+  assert.match(paste, /elimina la conexión y crea una nueva/u);
+  const discover = JSON.stringify(TUTORIALS.facebook.steps.find((step) => step.id === 'probar-seleccionar'));
+  assert.match(discover, /instagram_basic/u);
+  const cases = JSON.stringify(TUTORIALS.facebook.steps.find((step) => step.id === 'casos-uso-paginas'));
+  for (const text of ['Administrar todos los aspectos de tu página', 'Interactuar con los clientes en Messenger from Meta', 'Mensajes comerciales', 'casilla', 'Guardar', 'no se puede deshacer']) assert.ok(cases.includes(text), text);
+  const perms = JSON.stringify(TUTORIALS.facebook.steps.find((step) => step.id === 'permisos'));
+  for (const text of ['Listo para la prueba', 'Acciones', 'pages_read_user_content', 'pages_manage_engagement', 'pages_messaging']) assert.ok(perms.includes(text), text);
+});
+
+test('the first-hand Explorer steps are verified while unobserved ones stay flagged', () => {
+  const byId = (platform: 'instagram' | 'facebook', id: string) => TUTORIALS[platform].steps.find((step) => step.id === id)!;
+  assert.equal(byId('facebook', 'generar-token-usuario').verified, true);
+  for (const [platform, id] of [['instagram', 'cuenta-desarrollador'], ['facebook', 'cuenta-desarrollador'], ['instagram', 'portafolio-comercial'], ['instagram', 'agregar-probador'], ['instagram', 'generar-token'], ['facebook', 'token-larga-duracion']] as const) {
+    assert.equal(byId(platform, id).verified, false, `${platform}/${id}`);
   }
 });
 

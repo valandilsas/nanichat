@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
 import {
-  EMPTY_PROGRESS, TUTORIAL_PROGRESS_KEY, goTo, isCompleted, markCompleted, parseStoredProgress, percentComplete, resetPlatform, validateProgress,
+  EMPTY_PROGRESS, TUTORIAL_PROGRESS_KEY, goTo, isCompleted, isValidAppId, markCompleted, parseStoredProgress, percentComplete, resetPlatform, setAppId, validateProgress,
 } from '../app/tutorial/progress.ts';
 import { createApiHandler } from '../src/http/router.ts';
 import { openDatabase } from '../src/db/database.ts';
@@ -48,6 +48,34 @@ test('validateProgress rejects anything outside the strict shape', () => {
     { version: 1, platforms: { instagram: { currentStep: 0, completed: [1] } } },
   ];
   for (const value of bad) assert.throws(() => validateProgress(value), TypeError, JSON.stringify(value));
+});
+
+const DUMMY_APP_ID = '1234567890123';
+
+test('appId is optional, digits only (8-20), and validated like the rest of the document', () => {
+  assert.equal(validateProgress({ version: 1, appId: DUMMY_APP_ID, platforms: {} }).appId, DUMMY_APP_ID);
+  assert.equal(validateProgress({ version: 1, appId: '12345678', platforms: {} }).appId, '12345678');
+  assert.equal(validateProgress({ version: 1, appId: '1'.repeat(20), platforms: {} }).appId, '1'.repeat(20));
+  assert.equal('appId' in validateProgress({ version: 1, platforms: {} }), false);
+  for (const appId of ['1234567', '1'.repeat(21), 'abc12345678', '123 45678', ' 12345678', '12345678\n', '', 12345678, null, {}, '１２３４５６７８']) {
+    assert.throws(() => validateProgress({ version: 1, appId, platforms: {} }), TypeError, JSON.stringify(appId));
+  }
+  assert.equal(isValidAppId(DUMMY_APP_ID), true);
+  assert.equal(isValidAppId('12'), false);
+  assert.equal(isValidAppId(5), false);
+});
+
+test('setAppId stores or clears the id, rejects invalid values, and every other helper keeps it', () => {
+  const withId = setAppId(EMPTY_PROGRESS, DUMMY_APP_ID);
+  assert.equal(withId.appId, DUMMY_APP_ID);
+  assert.deepEqual(EMPTY_PROGRESS, { version: 1, platforms: {} }, 'input is not mutated');
+  assert.throws(() => setAppId(EMPTY_PROGRESS, 'nope'), TypeError);
+  assert.deepEqual(setAppId(withId, ''), EMPTY_PROGRESS);
+  assert.equal(goTo(withId, 'facebook', 2).appId, DUMMY_APP_ID);
+  assert.equal(markCompleted(withId, 'instagram', 'a-1').appId, DUMMY_APP_ID);
+  assert.equal(resetPlatform(markCompleted(withId, 'instagram', 'a-1'), 'instagram').appId, DUMMY_APP_ID);
+  assert.deepEqual(parseStoredProgress(JSON.stringify(withId)), withId);
+  assert.deepEqual(parseStoredProgress(JSON.stringify({ version: 1, appId: 'bad', platforms: {} })), EMPTY_PROGRESS);
 });
 
 test('validateProgress ignores prototype pollution keys without touching Object.prototype', () => {
@@ -130,6 +158,15 @@ test('GET/PUT /api/tutorial-progress persist validated progress in app_state and
   assert.deepEqual(JSON.parse((await call(origin, '/api/tutorial-progress')).body), { progress: payload });
   const row = database.prepare(`SELECT state_value FROM app_state WHERE state_key='tutorial_progress'`).get() as { state_value: string };
   assert.deepEqual(JSON.parse(row.state_value), payload);
+
+  const withAppId = { version: 1, appId: DUMMY_APP_ID, platforms: { facebook: { currentStep: 1, completed: [] } } };
+  const savedWithId = await call(origin, '/api/tutorial-progress', { method: 'PUT', headers: good, body: JSON.stringify(withAppId) });
+  assert.equal(savedWithId.status, 200);
+  assert.deepEqual(JSON.parse((await call(origin, '/api/tutorial-progress')).body), { progress: withAppId });
+  const badId = await call(origin, '/api/tutorial-progress', { method: 'PUT', headers: good, body: JSON.stringify({ ...withAppId, appId: 'EAAB-not-an-id' }) });
+  assert.equal(badId.status, 400);
+  assert.deepEqual(JSON.parse((await call(origin, '/api/tutorial-progress')).body), { progress: withAppId }, 'an invalid id changes nothing');
+  await call(origin, '/api/tutorial-progress', { method: 'PUT', headers: good, body: JSON.stringify(payload) });
 
   for (const body of ['{"version":1,"platforms":{"tiktok":{"currentStep":0,"completed":[]}}}', '{"version":1,"platforms":{},"x":1}', '[]', '{"version":1,"platforms":{"instagram":{"currentStep":-1,"completed":[]}}}']) {
     const rejected = await call(origin, '/api/tutorial-progress', { method: 'PUT', headers: good, body });

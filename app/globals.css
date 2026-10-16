@@ -867,6 +867,11 @@ td .kw-chip + .kw-chip { margin-left: 4px; }
 .tutorial-why strong { font-size: 12.5px; }
 .tutorial-instructions { margin: 0; padding-left: 20px; display: grid; gap: 6px; font-size: 13.5px; line-height: 1.5; overflow-wrap: anywhere; }
 .tutorial-links { display: flex; gap: 8px; flex-wrap: wrap; }
+.tutorial-links-block { display: grid; gap: 6px; }
+.tutorial-link-disabled { display: inline-grid; gap: 2px; max-width: 100%; }
+.tutorial-link-disabled .btn.disabled { opacity: .55; cursor: not-allowed; pointer-events: none; }
+.tutorial-appid { display: grid; gap: 6px; padding: 12px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius-lg); }
+.tutorial-appid input { max-width: 320px; }
 .tutorial-notes { display: grid; gap: 6px; background: var(--sun-soft); border-radius: var(--radius); padding: 10px 12px; }
 .tutorial-notes p { display: flex; gap: 8px; align-items: flex-start; color: var(--sun); }
 .tutorial-notes svg { flex: none; margin-top: 3px; }

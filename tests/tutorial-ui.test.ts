@@ -41,3 +41,15 @@ test('Conexiones mounts the tutorial block and page.tsx stays a thin integration
   assert.match(page, /<TutorialSection api=\{api\} confirm=\{confirm\} \/>/u);
   assert.doesNotMatch(page, /dangerouslySetInnerHTML/u);
 });
+
+test('the component source wires the App ID field, the login note, disabled deep links and the generated prompt', () => {
+  const source = readFileSync(new URL('../app/tutorial/TutorialSection.tsx', import.meta.url), 'utf8');
+  assert.match(source, /Tu ID de app/u);
+  assert.match(source, /parseAppIdInput/u);
+  assert.match(source, /setAppId\(progressRef\.current/u);
+  assert.match(source, /resolveLink\(link, progress\.appId\)/u);
+  assert.match(source, /aria-disabled="true"/u);
+  assert.match(source, /LOGIN_REDIRECT_NOTE/u);
+  assert.match(source, /buildHelpPrompt\(platform, step, index, steps\.length, progress\.appId\)/u);
+  assert.doesNotMatch(source, /helpPrompt/u);
+});

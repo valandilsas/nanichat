@@ -5,18 +5,24 @@
  */
 export type TutorialPlatform = 'instagram' | 'facebook';
 export type PlatformProgress = { currentStep: number; completed: string[] };
-export type TutorialProgress = { version: 1; platforms: Partial<Record<TutorialPlatform, PlatformProgress>> };
+/** `appId` is the person's Meta App ID (public, not a secret): digits only, used to build deep links into their own app. */
+export type TutorialProgress = { version: 1; appId?: string; platforms: Partial<Record<TutorialPlatform, PlatformProgress>> };
 
 export const TUTORIAL_PROGRESS_KEY = 'tutorial_progress';
 export const TUTORIAL_PLATFORMS: ReadonlyArray<TutorialPlatform> = ['instagram', 'facebook'];
 export const MAX_STEP_INDEX = 99;
 export const MAX_COMPLETED = 40;
 const STEP_ID = /^[a-z0-9-]{1,48}$/u;
+const APP_ID = /^[0-9]{8,20}$/u;
 
 export const EMPTY_PROGRESS: TutorialProgress = Object.freeze({ version: 1, platforms: Object.freeze({}) }) as TutorialProgress;
 
 export function isValidStepId(value: unknown): value is string {
   return typeof value === 'string' && STEP_ID.test(value);
+}
+
+export function isValidAppId(value: unknown): value is string {
+  return typeof value === 'string' && APP_ID.test(value);
 }
 
 function plainObject(value: unknown): Record<string, unknown> {
@@ -46,8 +52,9 @@ function validatePlatform(value: unknown): PlatformProgress {
 /** Strict validation: throws TypeError on any deviation, returns a fresh normalized copy. */
 export function validateProgress(value: unknown): TutorialProgress {
   const root = plainObject(value);
-  onlyKeys(root, ['version', 'platforms']);
+  onlyKeys(root, ['version', 'platforms', 'appId']);
   if (root.version !== 1) throw new TypeError('Unsupported version');
+  if (root.appId !== undefined && !isValidAppId(root.appId)) throw new TypeError('Invalid app id');
   const platforms: TutorialProgress['platforms'] = {};
   if (root.platforms !== undefined) {
     const raw = plainObject(root.platforms);
@@ -56,7 +63,7 @@ export function validateProgress(value: unknown): TutorialProgress {
       platforms[key as TutorialPlatform] = validatePlatform(raw[key]);
     }
   }
-  return { version: 1, platforms };
+  return root.appId === undefined ? { version: 1, platforms } : { version: 1, appId: root.appId as string, platforms };
 }
 
 /** Reads a stored value; anything missing, corrupt or invalid becomes empty progress. Never throws. */
@@ -71,7 +78,7 @@ function entryOf(progress: TutorialProgress, platform: TutorialPlatform): Platfo
 }
 
 function withEntry(progress: TutorialProgress, platform: TutorialPlatform, entry: PlatformProgress): TutorialProgress {
-  return { version: 1, platforms: { ...progress.platforms, [platform]: entry } };
+  return { ...progress, version: 1, platforms: { ...progress.platforms, [platform]: entry } };
 }
 
 export function goTo(progress: TutorialProgress, platform: TutorialPlatform, index: number): TutorialProgress {
@@ -94,7 +101,15 @@ export function isCompleted(progress: TutorialProgress, platform: TutorialPlatfo
 export function resetPlatform(progress: TutorialProgress, platform: TutorialPlatform): TutorialProgress {
   const platforms = { ...progress.platforms };
   delete platforms[platform];
-  return { version: 1, platforms };
+  return { ...progress, version: 1, platforms };
+}
+
+/** Stores the person's App ID, or clears it with an empty string. Throws TypeError on anything else invalid. */
+export function setAppId(progress: TutorialProgress, appId: string): TutorialProgress {
+  const { appId: _previous, ...rest } = progress;
+  if (appId === '') return { ...rest, version: 1 };
+  if (!isValidAppId(appId)) throw new TypeError('Invalid app id');
+  return { ...rest, version: 1, appId };
 }
 
 /** Whole-number percentage of completed steps; when knownIds is given, ids no longer in the content are ignored. */

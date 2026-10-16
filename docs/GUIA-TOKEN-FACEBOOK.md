@@ -144,9 +144,9 @@ Empecemos: pregúntame primero si ya tengo la app de Meta creada y si tengo cont
 
 - Explorador de la API Graph: [developers.facebook.com/tools/explorer](https://developers.facebook.com/tools/explorer/)
 - Depurador de tokens de acceso: [developers.facebook.com/tools/debug/accesstoken](https://developers.facebook.com/tools/debug/accesstoken/)
-- Respuestas privadas (Messenger Platform): busca «Private Replies» en [developers.facebook.com/docs/messenger-platform](https://developers.facebook.com/docs/messenger-platform)
-- Permisos y funciones de las apps de Meta: [developers.facebook.com/docs/permissions](https://developers.facebook.com/docs/permissions)
-- Tokens de acceso de larga duración: [developers.facebook.com/docs/facebook-login/guides/access-tokens/get-long-lived](https://developers.facebook.com/docs/facebook-login/guides/access-tokens/get-long-lived)
+- Respuestas privadas (Messenger Platform): [developers.facebook.com/documentation/business-messaging/messenger-platform/discovery/private-replies](https://developers.facebook.com/documentation/business-messaging/messenger-platform/discovery/private-replies)
+- Permisos y funciones de las apps de Meta: [developers.facebook.com/documentation/development/permissions](https://developers.facebook.com/documentation/development/permissions)
+- Tokens de acceso de larga duración: [developers.facebook.com/documentation/facebook-login/guides/access-tokens/get-long-lived](https://developers.facebook.com/documentation/facebook-login/guides/access-tokens/get-long-lived)
 
 ## Cambiar de tipo de token
 

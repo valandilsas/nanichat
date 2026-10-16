@@ -1,6 +1,6 @@
 /** Pure presentation helpers for the tutorial (no React, no DOM). */
-import type { TutorialScreenshot, TutorialStep } from './content';
-import { type TutorialPlatform, type TutorialProgress, goTo, markCompleted, percentComplete } from './progress';
+import { APP_ID_PLACEHOLDER, type TutorialLink, type TutorialScreenshot, type TutorialStep } from './content';
+import { type TutorialPlatform, type TutorialProgress, goTo, isValidAppId, markCompleted, percentComplete } from './progress';
 
 export type StepStatus = 'completed' | 'current' | 'pending';
 
@@ -60,6 +60,27 @@ export function screenshotView(screenshot: TutorialScreenshot): ScreenshotView {
   return safe
     ? { kind: 'image', src: file, alt: screenshot.alt, caption: screenshot.caption }
     : { kind: 'placeholder', label: 'Captura pendiente', caption: screenshot.caption };
+}
+
+export const APP_ID_HINT = 'Pega tu ID de app arriba para activar este enlace directo';
+export const LOGIN_REDIRECT_NOTE = 'Si no has iniciado sesión, Meta te pedirá entrar y luego te devolverá a esta misma página.';
+
+export type ResolvedLink = { label: string; href: string | null; hint?: string };
+
+/** Fills the `{APP_ID}` placeholder; a templated link without a valid app id is disabled (href null) with a hint. */
+export function resolveLink(link: TutorialLink, appId: string | undefined): ResolvedLink {
+  if (!link.url.includes(APP_ID_PLACEHOLDER)) return { label: link.label, href: link.url };
+  if (!isValidAppId(appId)) return { label: link.label, href: null, hint: APP_ID_HINT };
+  return { label: link.label, href: link.url.split(APP_ID_PLACEHOLDER).join(appId) };
+}
+
+export type AppIdInput = { kind: 'empty' } | { kind: 'valid'; value: string } | { kind: 'invalid' };
+
+/** Interprets what the person typed in the «Tu ID de app» field. */
+export function parseAppIdInput(text: string): AppIdInput {
+  const value = text.trim();
+  if (value === '') return { kind: 'empty' };
+  return isValidAppId(value) ? { kind: 'valid', value } : { kind: 'invalid' };
 }
 
 export function externalLinkAttrs(): { target: '_blank'; rel: 'noopener noreferrer' } {

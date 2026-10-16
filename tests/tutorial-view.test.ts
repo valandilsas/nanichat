@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { EMPTY_PROGRESS, goTo, markCompleted } from '../app/tutorial/progress';
 import { TUTORIALS } from '../app/tutorial/content';
-import { advance, clampStep, copyText, externalLinkAttrs, isSchematic, progressSummary, screenshotView, SCHEMATIC_NOTE, startIndex, stepLabel, stepStatus } from '../app/tutorial/view';
+import { APP_ID_HINT, LOGIN_REDIRECT_NOTE, advance, clampStep, copyText, externalLinkAttrs, isSchematic, parseAppIdInput, progressSummary, resolveLink, screenshotView, SCHEMATIC_NOTE, startIndex, stepLabel, stepStatus } from '../app/tutorial/view';
 
 const steps = TUTORIALS.instagram.steps;
 
@@ -93,4 +93,24 @@ test('copyText reports failure instead of throwing when nothing can copy', async
   assert.equal(await copyText('x', {}), false);
   assert.equal(await copyText('x', { fallback: () => { throw new Error('boom'); } }), false);
   assert.equal(await copyText('x', { fallback: () => false }), false);
+});
+
+test('resolveLink substitutes the app id into templated links and disables them while it is missing', () => {
+  const fixed = { label: 'Panel de apps de Meta', url: 'https://developers.facebook.com/apps/' };
+  const templated = { label: 'Panel de tu app', url: 'https://developers.facebook.com/apps/{APP_ID}/dashboard/' };
+  assert.deepEqual(resolveLink(fixed, undefined), { label: fixed.label, href: fixed.url });
+  assert.deepEqual(resolveLink(fixed, '1234567890123'), { label: fixed.label, href: fixed.url });
+  assert.deepEqual(resolveLink(templated, '1234567890123'), { label: templated.label, href: 'https://developers.facebook.com/apps/1234567890123/dashboard/' });
+  assert.deepEqual(resolveLink(templated, undefined), { label: templated.label, href: null, hint: APP_ID_HINT });
+  assert.deepEqual(resolveLink(templated, ''), { label: templated.label, href: null, hint: APP_ID_HINT });
+  assert.equal(resolveLink(templated, '12ab/../x').href, null, 'an invalid id never reaches a URL');
+  assert.equal(APP_ID_HINT, 'Pega tu ID de app arriba para activar este enlace directo');
+  assert.match(LOGIN_REDIRECT_NOTE, /^Si no has iniciado sesión, Meta te pedirá entrar y luego te devolverá a esta misma página\.$/u);
+});
+
+test('parseAppIdInput trims, accepts 8-20 digits, treats blank as clearing and flags the rest', () => {
+  assert.deepEqual(parseAppIdInput('  1234567890123 '), { kind: 'valid', value: '1234567890123' });
+  assert.deepEqual(parseAppIdInput(''), { kind: 'empty' });
+  assert.deepEqual(parseAppIdInput('   '), { kind: 'empty' });
+  for (const bad of ['123', 'abc', '1234567x', '1'.repeat(21), 'https://developers.facebook.com/apps/1234567890123/']) assert.deepEqual(parseAppIdInput(bad), { kind: 'invalid' }, bad);
 });
