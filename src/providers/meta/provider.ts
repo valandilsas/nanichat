@@ -318,8 +318,11 @@ export class MetaProvider implements SocialProvider {
     commentId: string,
     payload: PrivateReplyPayload,
   ): Promise<SendResult> {
-    const { connection, token, platform } = this.accountContext(account);
+    const { connection, token, platform, relatedPageId } = this.accountContext(account);
     if (platform === 'facebook') return this.facebookSendPrivateReply(account, connection.graphVersion, token, commentId, payload);
+    // Facebook Login: Instagram private replies are sent from the linked Page (/{page-id}/messages). Sending from the
+    // IG user id is rejected by Meta with (#200) subcode 2534066 even with a valid Page token and permissions.
+    const senderId = connection.loginKind === 'facebook_login' && relatedPageId ? relatedPageId : account.providerAccountId;
     if (!validPrivateReplyPayload(payload)) {
       return { outcome: 'definitive_rejection', safeErrorCode: 'invalid_reply_payload' };
     }
@@ -346,7 +349,7 @@ export class MetaProvider implements SocialProvider {
       const result = await this.request(
         connection.loginKind,
         connection.graphVersion,
-        `/${encodeURIComponent(account.providerAccountId)}/messages`,
+        `/${encodeURIComponent(senderId)}/messages`,
         token,
         { method: 'POST', body: JSON.stringify({ recipient: { comment_id: commentId }, message }) },
       );
@@ -760,6 +763,7 @@ export class MetaProvider implements SocialProvider {
     connection: ReturnType<typeof getConnectionCredential>;
     token: string;
     platform: 'instagram' | 'facebook';
+    relatedPageId?: string;
   } {
     const summary = getAccountSummary(this.database, account.accountId);
     // The stored platform decides (never the caller's ref). A Page account is refused while the switch is off.
@@ -781,7 +785,7 @@ export class MetaProvider implements SocialProvider {
     if (!token) throw new Error('Validated account credential is unavailable');
     // Page endpoints only exist on graph.facebook.com with a Page token.
     if (platform === 'facebook' && connection.loginKind !== 'facebook_login') throw new PlatformNotSupportedError();
-    return { connection, token, platform };
+    return { connection, token, platform, ...(summary.relatedPageId ? { relatedPageId: summary.relatedPageId } : {}) };
   }
 
   private assertMediaBelongsToAccount(accountId: string, mediaId: string): void {

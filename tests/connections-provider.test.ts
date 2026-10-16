@@ -275,6 +275,33 @@ test('Instagram Login private reply uses IG account route, IG host, bearer token
   });
 });
 
+test('Facebook Login private reply to an Instagram comment is sent from the linked Page, not the IG user id', async () => {
+  await withTempDb(async (directory) => {
+    const state = makeProviderDb(directory, 'facebook_login', 'fb-page-token');
+    state.db.prepare(`UPDATE social_accounts SET related_page_id = 'page-1' WHERE account_id = ?`).run(state.account.accountId);
+    createComment(state.db, { accountId: state.account.accountId, mediaId: 'media-1', commentId: 'fb-comment', text: 'hi', username: 'user', createdAt: null });
+    const calls: Array<{ url: URL; init: RequestInit }> = [];
+    const fetcher: typeof fetch = async (input, init = {}) => {
+      const url = new URL(String(input));
+      calls.push({ url, init });
+      // Mirrors the real Graph API: /{ig-user-id}/messages answers (#200) subcode 2534066 for a private reply.
+      if (url.pathname.endsWith('/17841400000000000/messages')) {
+        return Response.json({ error: { message: '(#200) private reply scopes', code: 200, error_subcode: 2534066 } }, { status: 400 });
+      }
+      return Response.json({ recipient_id: 'igsid-1', message_id: 'fb-message-1' });
+    };
+    const provider = new MetaProvider(state.db, state.vault, fetcher);
+    const result = await provider.sendPrivateReply(state.account, 'fb-comment', { text: 'Hello', buttons: [] });
+    assert.equal(result.outcome, 'accepted');
+    assert.equal(result.messageId, 'fb-message-1');
+    assert.equal(calls.length, 1);
+    assert.equal(calls[0]!.url.origin, 'https://graph.facebook.com');
+    assert.equal(calls[0]!.url.pathname, '/v26.0/page-1/messages');
+    assert.deepEqual(JSON.parse(String(calls[0]!.init.body)).recipient, { comment_id: 'fb-comment' });
+    state.db.close();
+  });
+});
+
 test('provider rejects invalid reply buttons without truncating payload or issuing a POST', async () => {
   await withTempDb(async (directory) => {
     const state = makeProviderDb(directory, 'instagram_login');
@@ -381,6 +408,8 @@ test('readback rejects mismatched provider message IDs instead of reporting them
   });
 });
 
+// Fallback only: this account has no related_page_id. With a linked Page the reply goes to /{page-id}/messages
+// (see 'Facebook Login private reply to an Instagram comment is sent from the linked Page').
 test('Facebook Login private reply uses linked IG account route and encrypted Page token, not Page-ID route', async () => {
   await withTempDb(async (directory) => {
     const state = makeProviderDb(directory, 'facebook_login', 'encrypted-page-token');
