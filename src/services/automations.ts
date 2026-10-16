@@ -1,6 +1,7 @@
 import type { FollowGateSnapshot, InteractiveMode, ProviderComment, PrivateReplyPayload, ResourceAttachment } from '../core/domain.ts';
 import { randomUUID } from 'node:crypto';
 import type { DatabaseSync } from 'node:sqlite';
+import { DomainRejectionError } from '../core/errors.ts';
 import { storedPublicReplyVariants, validatePublicReplyVariants } from './public-reply.ts';
 import { assertAttachmentRetired, validateResourceAttachment } from './resource-attachment.ts';
 import { followGateAvailable } from './follow-gate-rules.ts';
@@ -586,15 +587,15 @@ export class AutomationService {
         FROM social_accounts s JOIN connections c ON c.id=s.connection_id WHERE s.account_id=?`).get(accountId) as {
         account_status: string; connection_status: string; deleted_at: string | null;
       } | undefined;
-      if (hold) throw new Error('A safety hold blocks real replies for this account');
+      if (hold) throw new DomainRejectionError('account_send_hold', 'A safety hold blocks real replies for this account');
       if (!owner || owner.account_status !== 'valid' || owner.connection_status !== 'valid' || owner.deleted_at) {
-        throw new Error('Real replies require a validated account and connection');
+        throw new DomainRejectionError('account_not_validated', 'Real replies require a validated account and connection');
       }
     }
     const result = this.database.prepare(`UPDATE automations SET real_enabled=?, version=version+1, updated_at=?
       WHERE automation_id=? AND account_id=? AND status='enabled'`)
       .run(enabled ? 1 : 0, new Date().toISOString(), automationId, accountId);
-    if (Number(result.changes) !== 1) throw new Error('Only an enabled automation can change real-reply mode');
+    if (Number(result.changes) !== 1) throw new DomainRejectionError('automation_not_enabled', 'Only an enabled automation can change real-reply mode');
   }
 
   setAccountSendHold(accountId: string, reasonCode: string): void {
