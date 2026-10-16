@@ -123,8 +123,8 @@ export class QueueService {
     const state = simulated ? 'SIMULATED' : 'QUEUED';
     const insert = this.database.prepare(`INSERT OR IGNORE INTO queue_items
       (queue_item_id, account_id, comment_id, automation_id, state, dry_run, payload_json, created_at, updated_at,
-       public_reply_text, public_reply_variant, public_reply_selected_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
+       public_reply_text, public_reply_variant, public_reply_selected_at, state_reason_code)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
     // A media-scoped automation only accepts comments of its own media; a general one any media of the same account.
     const selectComment = this.database.prepare(`SELECT comment_id, media_id, text, username, created_at, parent_id, author_igsid
       FROM comments WHERE account_id = ? AND comment_id = ?`);
@@ -172,6 +172,8 @@ export class QueueService {
       if (matchingIds.some((match) => match.automation_id !== automationId)) {
         throw new Error('Comment matches multiple automations and requires review');
       }
+      // One DM per person: a repeated comment is recorded as SKIPPED (already_messaged), never sent and no longer pending.
+      const alreadyMessaged = this.authorHasLiveItem(accountId, automationId, comment, facebookPageId !== undefined, simulated);
       const variables = {
         username: comment.username ?? '', comment: comment.text ?? '', keyword: classification.matchedKeywords[0]!,
         account: account.username, media: mediaLabel,
@@ -188,16 +190,67 @@ export class QueueService {
         : renderReply(automation.reply_text, variables, urlButtons);
       const now = new Date().toISOString();
       // Simulated items keep the would-be public reply as an inert preview (WOULD_REPLY_PUBLIC); it is never posted.
-      const preview = simulated && automation.public_reply_enabled === 1
+      const preview = simulated && !alreadyMessaged && automation.public_reply_enabled === 1
         ? this.choosePublicReply(accountId, storedPublicReplyVariants(automation.public_reply_variants_json),
           { username: comment.username ?? '', keyword: classification.matchedKeywords[0]! })
         : null;
-      const result = insert.run(randomUUID(), accountId, commentId, automationId, state, simulated ? 1 : 0,
+      const result = insert.run(randomUUID(), accountId, commentId, automationId, alreadyMessaged ? 'SKIPPED' : state, simulated ? 1 : 0,
         JSON.stringify({ ...payload, automation_version: automation.version }), now, now,
-        preview?.text ?? null, preview?.variant ?? null, preview ? new Date(this.clock()).toISOString() : null);
-      if (Number(result.changes) > 0) inserted.push(commentId);
+        preview?.text ?? null, preview?.variant ?? null, preview ? new Date(this.clock()).toISOString() : null,
+        alreadyMessaged ? 'already_messaged' : null);
+      if (Number(result.changes) > 0 && !alreadyMessaged) inserted.push(commentId);
     }
     return inserted;
+  }
+
+  /**
+   * One DM per person per automation and publication: true when the comment's author already has a live item (anything
+   * but FAILED_PERMANENT, EXPIRED or SKIPPED) for this automation on the same media, so a general automation still
+   * answers that person on other publications. Only items of the same kind count: a simulated item never blocks a real
+   * one. Facebook authors are matched by id (no username without an app role), Instagram ones by username.
+   */
+  private authorHasLiveItem(accountId: string, automationId: string,
+    comment: { comment_id: string; media_id: string; username: string | null; author_igsid: string | null },
+    byAuthorId: boolean, simulated: boolean): boolean {
+    const authorKey = byAuthorId ? comment.author_igsid : comment.username;
+    if (!authorKey) return false;
+    return Boolean(this.database.prepare(`SELECT 1 FROM queue_items q
+      JOIN comments c ON c.account_id = q.account_id AND c.comment_id = q.comment_id
+      WHERE q.account_id = ? AND q.automation_id = ? AND c.media_id = ? AND q.comment_id <> ? AND q.dry_run = ?
+        AND q.state NOT IN ('FAILED_PERMANENT', 'EXPIRED', 'SKIPPED')
+        AND (CASE WHEN ? = 'id' THEN c.author_igsid = ? ELSE lower(c.username) = lower(?) END)
+      LIMIT 1`).get(accountId, automationId, comment.media_id, comment.comment_id, simulated ? 1 : 0,
+      byAuthorId ? 'id' : 'username', authorKey, authorKey));
+  }
+
+  /**
+   * Explicit operator retry of a FAILED_PERMANENT private reply. A definitive rejection is provably unsent, so the item
+   * goes back to QUEUED and the engine re-checks the comment before sending. Refused when the comment left Meta's
+   * private-reply window, or when the author already has another live item (one DM per person). Ambiguous outcomes
+   * (UNKNOWN_OUTCOME) are never retried: the message may have arrived.
+   */
+  retryPrivateReply(accountId: string, queueItemId: string): void {
+    const row = this.database.prepare(`SELECT q.state, q.dry_run, q.automation_id, s.platform,
+        c.comment_id, c.media_id, c.username, c.author_igsid, c.created_at
+      FROM queue_items q
+      JOIN comments c ON c.account_id = q.account_id AND c.comment_id = q.comment_id
+      JOIN social_accounts s ON s.account_id = q.account_id
+      WHERE q.queue_item_id = ? AND q.account_id = ?`).get(queueItemId, accountId) as {
+        state: string; dry_run: number; automation_id: string; platform: string; comment_id: string; media_id: string;
+        username: string | null; author_igsid: string | null; created_at: string | null;
+      } | undefined;
+    if (!row) throw new QueueActionError(404, 'queue_item_not_found');
+    if (row.state !== 'FAILED_PERMANENT') throw new QueueActionError(409, 'private_reply_not_failed');
+    if (isPastPrivateReplyWindow(row.created_at, this.clock())) throw new QueueActionError(409, 'private_reply_window_elapsed');
+    if (this.authorHasLiveItem(accountId, row.automation_id, row, row.platform === 'facebook', row.dry_run === 1)) {
+      throw new QueueActionError(409, 'already_messaged');
+    }
+    // attempt_count restarts: a fresh operator retry must not be escalated by the previous run's retry budget.
+    const updated = this.database.prepare(`UPDATE queue_items SET state = 'QUEUED', state_reason_code = NULL,
+        next_attempt_at = NULL, attempt_count = 0, updated_at = ?
+      WHERE queue_item_id = ? AND account_id = ? AND state = 'FAILED_PERMANENT'`)
+      .run(new Date(this.clock()).toISOString(), queueItemId, accountId);
+    if (Number(updated.changes) === 0) throw new QueueActionError(409, 'private_reply_not_failed');
   }
 
   setDryRun(enabled: boolean, confirmed = false): void {

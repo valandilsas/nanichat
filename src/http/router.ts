@@ -348,6 +348,13 @@ async function route(
       publicEvents: publicEvents.map((event) => ({ type: event.type, at: event.at, replyId: event.replyId,
         safeErrorCode: event.safeErrorCode, details: safeAttemptDetails(String(event.details_json)) })) });
   }
+  const privateRetryMatch = path.match(/^\/api\/queue\/([^/]+)\/retry$/u);
+  if (privateRetryMatch && method === 'POST') {
+    // Explicit operator action: only a FAILED_PERMANENT (provably unsent) private reply of an item owned by this account.
+    const selected = accountId(body.accountId, db);
+    requireService(deps.queue, 'queue').retryPrivateReply(selected, decodeURIComponent(privateRetryMatch[1]!));
+    return send(response, 200, { ok: true, state: 'QUEUED' });
+  }
   const publicRetryMatch = path.match(/^\/api\/queue\/([^/]+)\/public-reply\/retry$/u);
   if (publicRetryMatch && method === 'POST') {
     // Explicit operator action: only a FAILED public reply of an item owned by this account; the private state is untouched.

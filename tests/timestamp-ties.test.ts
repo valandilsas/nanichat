@@ -53,8 +53,9 @@ function provider() {
 /** Enqueues c0..c(n-1) in one batch, then pins a shared created_at and ids that sort in reverse insertion order. */
 async function enqueueTiedBatch(db: Db, queue: QueueService, automationId: string, count: number): Promise<void> {
   const ids = Array.from({ length: count }, (_, index) => `c${index}`);
+  // One DM per person per publication: each tied comment comes from a different person.
   for (const id of ids) {
-    createComment(db, { accountId: 'acc', mediaId: 'm', commentId: id, text: 'quiero la guide', username: 'customer',
+    createComment(db, { accountId: 'acc', mediaId: 'm', commentId: id, text: 'quiero la guide', username: `customer-${id}`,
       createdAt: new Date(Date.now() - 60_000).toISOString() });
   }
   assert.equal((await queue.enqueueReviewed('acc', automationId, ids)).length, count);

@@ -452,12 +452,14 @@ test('variant rotation persists the rendered text and never repeats within the l
     const queue = new QueueService(db, provider as never, { clock: () => (now += 1), rng: () => 0, sendSpacingMs: 0, publicReplySpacingMs: 0 } as never);
     queue.setDryRun(false, true);
     const posted: string[] = [];
+    // One DM per person per publication: every comment comes from a different person.
     for (let index = 0; index < 8; index++) {
-      comment(db, ctx, `c${index}`);
+      comment(db, ctx, `c${index}`, `customer${index}`);
       await sendPrivate(db, queue, ctx, automationId, `c${index}`);
       await queue.processPublicReply();
       posted.push(item(db, `c${index}`).public_reply_text as string);
     }
+    // The public text renders the username the provider re-reads at send time (always «customer» in fakeProvider).
     assert.deepEqual(posted, ['A customer', 'B customer', 'C customer', 'D customer', 'A customer', 'B customer', 'C customer', 'D customer']);
     assert.deepEqual(provider.publicTexts, posted);
     for (let index = 0; index < posted.length; index++) assert.equal(posted.slice(Math.max(0, index - 3), index).includes(posted[index]!), false);
@@ -481,7 +483,7 @@ for (const [label, makeClock] of [
       queue.setDryRun(false, true);
       const posted: Array<string | null> = [];
       for (let index = 0; index < 6; index++) {
-        comment(db, ctx, `c${index}`);
+        comment(db, ctx, `c${index}`, `customer${index}`);
         await sendPrivate(db, queue, ctx, automationId, `c${index}`);
         await queue.processPublicReply();
         posted.push(item(db, `c${index}`).public_reply_text as string | null);
@@ -501,7 +503,7 @@ test('public replies keep their own minimum spacing (default 20 s)', async () =>
     const queue = new QueueService(db, provider as never, { clock: () => now, sendSpacingMs: 0 });
     queue.setDryRun(false, true);
     comment(db, ctx, 'c1');
-    comment(db, ctx, 'c2');
+    comment(db, ctx, 'c2', 'customer2');
     await sendPrivate(db, queue, ctx, automationId, 'c1');
     await sendPrivate(db, queue, ctx, automationId, 'c2');
     assert.ok(await queue.processPublicReply());
@@ -622,7 +624,7 @@ test('scheduler tick runs the public step after the private step, at most one pu
     const ctx = seed(db);
     const automationId = automation(db, ctx);
     comment(db, ctx, 'c1');
-    comment(db, ctx, 'c2');
+    comment(db, ctx, 'c2', 'customer2');
     const provider = fakeProvider();
     const queue = new QueueService(db, provider as never, { sendSpacingMs: 0, publicReplySpacingMs: 0 } as never);
     const scheduler = new Scheduler(db, new Scanner(db, provider as never), queue, { sendSpacingMs: 0 });
@@ -739,5 +741,26 @@ test('API: simulated queue items expose the would-be public reply preview', asyn
     const listed = (await call('GET', '/api/queue?accountId=acc')).body.items[0];
     assert.equal(listed.state, 'SIMULATED');
     assert.deepEqual(listed.publicReply, { state: null, text: '¡Listo @customer! Te escribí por DM', attempts: 0, nextAt: null, safeErrorCode: null, replyId: null, preview: true });
+  });
+});
+
+test('API: private retry endpoint re-queues only a FAILED_PERMANENT item of the selected account', async () => {
+  await withApi(async ({ db, queue, call }) => {
+    const ctx = { accountId: 'acc', mediaId: 'm' };
+    const automationId = automation(db, ctx);
+    comment(db, ctx, 'c1');
+    queue.setDryRun(false, true);
+    await queue.enqueueReviewed('acc', automationId, ['c1']);
+    const id = item(db, 'c1').queue_item_id as string;
+    assert.equal((await call('POST', `/api/queue/${id}/retry`, { accountId: 'acc' })).status, 409, 'QUEUED is not retryable');
+    db.prepare(`UPDATE queue_items SET state = 'FAILED_PERMANENT', attempt_count = 5 WHERE queue_item_id = ?`).run(id);
+    assert.equal((await call('POST', `/api/queue/${id}/retry`, { accountId: 'acc2' })).status, 404);
+    assert.equal((await call('POST', '/api/queue/nope/retry', { accountId: 'acc' })).status, 404);
+    assert.equal((await call('POST', `/api/queue/${id}/retry`, {})).status, 400);
+    const retried = await call('POST', `/api/queue/${id}/retry`, { accountId: 'acc' });
+    assert.equal(retried.status, 200);
+    assert.deepEqual([item(db, 'c1').state, item(db, 'c1').attempt_count], ['QUEUED', 0]);
+    const again = await call('POST', `/api/queue/${id}/retry`, { accountId: 'acc' });
+    assert.deepEqual([again.status, again.body.error], [409, 'private_reply_not_failed']);
   });
 });
