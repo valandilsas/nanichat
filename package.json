@@ -1,8 +1,10 @@
 {
   "name": "local-social-automation",
   "version": "0.2.1",
+  "description": "Respuestas automáticas a comentarios de Instagram, en tu propia computadora",
   "license": "MIT",
   "private": true,
+  "main": "desktop/main.cjs",
   "engines": {
     "node": ">=24.21.0"
   },
@@ -11,7 +13,11 @@
     "build": "next build",
     "start": "node scripts/start.mjs",
     "typecheck": "tsc --noEmit",
-    "test": "node --import tsx --test --test-timeout=120000 --test-force-exit tests/*.test.ts"
+    "test": "node --import tsx --test --test-timeout=120000 --test-force-exit tests/*.test.ts",
+    "desktop:dev": "node packaging/desktop/run.mjs dev",
+    "desktop:icons": "node packaging/desktop/run.mjs icons",
+    "desktop:dist:linux": "node packaging/desktop/run.mjs dist linux",
+    "desktop:dist:win": "node packaging/desktop/run.mjs dist win"
   },
   "dependencies": {
     "@fontsource-variable/bricolage-grotesque": "5.3.0",
@@ -28,6 +34,8 @@
     "@types/node": "26.6.4",
     "@types/react": "19.3.0",
     "@types/react-dom": "19.3.0",
+    "electron": "44.8.0",
+    "electron-builder": "26.15.3",
     "typescript": "7.0.2"
   }
 }

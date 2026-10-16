@@ -1,0 +1,193 @@
+# Builds the Social Desk desktop installers (Linux AppImage + deb on ubuntu-latest, Windows NSIS .exe on windows-latest)
+# and, for v* tags, attaches them to the GitHub Release. Details: packaging/desktop/README.md.
+name: Desktop installers
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - 'desktop/**'
+      - 'packaging/desktop/**'
+      - 'src/**'
+      - 'app/**'
+      - 'public/**'
+      - 'scripts/**'
+      - 'server.ts'
+      - 'next.config.mjs'
+      - 'tsconfig.json'
+      - 'package.json'
+      - 'package-lock.json'
+      - 'electron-builder.yml'
+      - '.github/workflows/desktop-installers.yml'
+  push:
+    branches: [main]
+    # Path filters are not evaluated for tag pushes: every v* tag builds and releases.
+    tags: ['v*']
+    paths:
+      - 'desktop/**'
+      - 'packaging/desktop/**'
+      - 'src/**'
+      - 'app/**'
+      - 'public/**'
+      - 'scripts/**'
+      - 'server.ts'
+      - 'next.config.mjs'
+      - 'tsconfig.json'
+      - 'package.json'
+      - 'package-lock.json'
+      - 'electron-builder.yml'
+      - '.github/workflows/desktop-installers.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: desktop-installers-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build desktop (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target: linux
+            script: desktop:dist:linux
+            artifact: desktop-linux
+          - os: windows-latest
+            target: win
+            script: desktop:dist:win
+            artifact: desktop-windows
+    env:
+      NEXT_TELEMETRY_DISABLED: '1'
+      npm_config_fund: 'false'
+      npm_config_audit: 'false'
+    outputs:
+      version: ${{ steps.versions.outputs.app }}
+    steps:
+      - name: Check out
+        uses: actions/checkout@v4
+
+      - name: Read versions from package.json
+        id: versions
+        shell: bash
+        run: |
+          node -e '
+            const fs = require("node:fs");
+            const manifest = JSON.parse(fs.readFileSync("package.json", "utf8"));
+            const node = String(manifest.engines?.node ?? "").replace(/^\s*>=\s*/, "").trim();
+            if (!/^\d+\.\d+\.\d+$/.test(node)) {
+              throw new Error(`engines.node must be a plain minimum like >=24.21.0 (found "${manifest.engines?.node}")`);
+            }
+            const app = manifest.version;
+            if ((process.env.GITHUB_REF ?? "").startsWith("refs/tags/v")) {
+              const tag = process.env.GITHUB_REF_NAME;
+              if (tag !== `v${app}`) {
+                throw new Error(`Tag ${tag} does not match package.json version ${app} (expected v${app})`);
+              }
+            }
+            fs.appendFileSync(process.env.GITHUB_OUTPUT, `node=${node}\napp=${app}\n`);
+            console.log(`Node.js ${node}, Social Desk ${app}`);
+          '
+
+      - name: Set up Node.js ${{ steps.versions.outputs.node }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ steps.versions.outputs.node }}
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Build the web app
+        run: npm run build
+
+      - name: Build desktop installer (${{ matrix.target }})
+        run: npm run ${{ matrix.script }}
+
+      - name: Compute SHA-256 checksums
+        shell: bash
+        run: |
+          node -e '
+            const crypto = require("node:crypto");
+            const fs = require("node:fs");
+            const path = require("node:path");
+            const files = fs.readdirSync("dist")
+              .filter((name) => /\.(AppImage|deb|exe)$/u.test(name))
+              .sort();
+            if (files.length === 0) throw new Error("No installer artifacts found in dist/");
+            const lines = files.map((name) => {
+              const hash = crypto.createHash("sha256").update(fs.readFileSync(path.join("dist", name))).digest("hex");
+              return `${hash}  ${name}\n`;
+            });
+            const out = path.join("dist", `SHA256SUMS-desktop-${process.argv[1]}.txt`);
+            fs.writeFileSync(out, lines.join(""), "utf8");
+            process.stdout.write(fs.readFileSync(out, "utf8"));
+          ' "${{ matrix.target }}"
+
+      - name: Upload desktop artifacts (${{ matrix.target }})
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: |
+            dist/*.AppImage
+            dist/*.deb
+            dist/SocialDesk-Setup-*.exe
+            dist/SHA256SUMS-desktop-*.txt
+          if-no-files-found: error
+          retention-days: 30
+
+  release:
+    name: Attach desktop installers to GitHub Release
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Download Linux artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: desktop-linux
+          path: dist
+
+      - name: Download Windows artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: desktop-windows
+          path: dist
+
+      - name: Combine and verify checksums
+        working-directory: dist
+        run: |
+          cat SHA256SUMS-desktop-linux.txt SHA256SUMS-desktop-win.txt > SHA256SUMS-desktop.txt
+          sha256sum -c SHA256SUMS-desktop.txt
+
+      - name: Create or update the release and upload artifacts
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ github.ref_name }}
+          VERSION: ${{ needs.build.outputs.version }}
+        run: |
+          set -euo pipefail
+          if ! gh release view "$TAG" >/dev/null 2>&1; then
+            gh release create "$TAG" --title "Social Desk ${VERSION}" --notes "Social Desk ${VERSION}" --verify-tag
+          fi
+          gh release upload "$TAG" \
+            dist/*.AppImage \
+            dist/*.deb \
+            dist/SocialDesk-Setup-*.exe \
+            dist/SHA256SUMS-desktop.txt \
+            --clobber

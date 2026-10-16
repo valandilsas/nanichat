@@ -1,0 +1,71 @@
+# Social Desk desktop app (Electron). Build: npm run build, then npm run desktop:dist:linux / desktop:dist:win.
+# Details: packaging/desktop/README.md. The Inno Setup installer in packaging/windows is a separate, unchanged build.
+appId: com.socialdesk.app
+productName: Social Desk
+copyright: Copyright © Social Desk contributors
+# Next.js and tsx need a real file system: no asar archive.
+asar: false
+# Every native addon in node_modules is N-API (node-llama-cpp; sharp is pruned), so nothing is rebuilt for Electron.
+npmRebuild: false
+nodeGypRebuild: false
+buildDependenciesFromSource: false
+directories:
+  output: dist
+  buildResources: build
+# Only what the runtime loads: desktop shell -> desktop/server-entry.mjs -> scripts/start.mjs -> server.ts (tsx) ->
+# src/ (+ app/tutorial modules imported by the API router) and the compiled Next.js build in .next.
+# Production node_modules are added by electron-builder (no devDependencies) and pruned by the afterPack hook.
+files:
+  - package.json
+  - tsconfig.json
+  - next.config.mjs
+  - server.ts
+  - scripts/start.mjs
+  - desktop/**/*
+  - src/**/*
+  - app/**/*
+  - public/**/*
+  - .next/**/*
+  - '!.next/cache{,/**}'
+  - '!.next/dev{,/**}'
+  - '!.next/types{,/**}'
+  - '!.next/trace'
+  - '!.next/trace-build'
+  - '!**/*.test.ts'
+  - build/icon.png
+  - build/icon.ico
+afterPack: packaging/desktop/after-pack.cjs
+
+win:
+  target:
+    - target: nsis
+      arch: [x64]
+  icon: build/icon.ico
+nsis:
+  oneClick: false
+  perMachine: false
+  allowElevation: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: always
+  createStartMenuShortcut: true
+  shortcutName: Social Desk
+  installerLanguages: [es_ES]
+  # User data lives in %LOCALAPPDATA%\SocialDesk (shared with the Inno Setup installer) and is never deleted.
+  deleteAppDataOnUninstall: false
+  artifactName: SocialDesk-Setup-${version}.exe
+
+linux:
+  target:
+    - target: AppImage
+      arch: [x64]
+    - target: deb
+      arch: [x64]
+  icon: build/icon.png
+  category: Office
+  executableName: social-desk
+  maintainer: Social Desk
+  synopsis: Automatización local de respuestas para Instagram
+appImage:
+  artifactName: SocialDesk-${version}-${arch}.AppImage
+deb:
+  artifactName: social-desk_${version}_${arch}.deb

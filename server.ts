@@ -69,6 +69,8 @@ function requestHost(request: IncomingMessage): string {
   return (request.headers.host ?? '').replace(/:\d+$/u, '').toLowerCase();
 }
 
+let shuttingDown = false;
+
 async function start(): Promise<void> {
   await app.prepare();
   const server = createServer((request, response) => {
@@ -90,6 +92,8 @@ async function start(): Promise<void> {
   });
 
   function shutdown(): void {
+    if (shuttingDown) return;
+    shuttingDown = true;
     server.close(() => {
       database.close();
       applicationLock.release();
