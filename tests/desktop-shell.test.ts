@@ -3,7 +3,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 
 import { createRequire } from 'node:module';
 import { createServer } from 'node:net';
 import { tmpdir } from 'node:os';
-import { join, resolve } from 'node:path';
+import { join, posix, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import test from 'node:test';
 import { removeTempDir } from './helpers/tmp.ts';
@@ -202,7 +202,8 @@ test('Linux autostart writes and removes ~/.config/autostart/social-desk.desktop
     homedir: temp,
     execPath: '/usr/bin/social-desk',
   });
-  assert.equal(file, join(temp, '.config', 'autostart', 'social-desk.desktop'));
+  // The module builds Linux paths with posix separators on every host, so compare the same way (Windows CI too).
+  assert.equal(file, posix.join(temp, '.config', 'autostart', 'social-desk.desktop'));
   const content = readFileSync(file, 'utf8');
   assert.match(content, /^\[Desktop Entry\]\n/u);
   assert.match(content, /^Exec="\/home\/ana\/Apps\/Social Desk\.AppImage" --hidden$/mu);
