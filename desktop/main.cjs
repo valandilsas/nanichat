@@ -416,10 +416,9 @@ function main() {
   app.whenReady().then(async () => {
     Menu.setApplicationMenu(applicationMenu());
     const { existed } = readSettings(paths.settings);
-    if (!existed) {
-      updateSettings({});
-      applyOpenAtLogin();
-    }
+    if (!existed) updateSettings({});
+    // Re-applied on every launch (idempotent) so a deleted autostart entry or a moved AppImage heals itself.
+    applyOpenAtLogin();
     // Linux/macOS shutdown: stop the server before the session ends.
     powerMonitor.on('shutdown', (event) => {
       event.preventDefault();
