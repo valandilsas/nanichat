@@ -20,7 +20,9 @@ test('demo discovery returns only Instagram accounts unless the connection is Fa
   for (const account of accounts) assert.match(JSON.stringify(account), /tu_|ejemplo|demo/iu);
 });
 
-test('capture guards refuse the real ports, non-/tmp data dirs and output outside public/tutorial', () => {
+const POSIX_ONLY = process.platform === 'win32' ? 'dev-only capture tooling uses POSIX /tmp paths (Linux/macOS)' : false;
+
+test('capture guards refuse the real ports, non-/tmp data dirs and output outside public/tutorial', { skip: POSIX_ONLY }, () => {
   for (const port of [3000, 3100]) assert.throws(() => assertSafePort(port), /reserved|refus/iu, String(port));
   assert.throws(() => assertSafePort(0));
   assert.throws(() => assertSafePort(70000));
@@ -38,7 +40,7 @@ test('capture guards refuse the real ports, non-/tmp data dirs and output outsid
   assert.ok(TUTORIAL_IMAGE_STEPS.length >= 5);
 });
 
-test('capture-tutorial.mjs refuses reserved ports and foreign data dirs before touching Chrome or the server', () => {
+test('capture-tutorial.mjs refuses reserved ports and foreign data dirs before touching Chrome or the server', { skip: POSIX_ONLY }, () => {
   for (const env of [{ TUTORIAL_CAPTURE_PORT: '3000' }, { TUTORIAL_CAPTURE_PORT: '3100' }, { TUTORIAL_CAPTURE_DATA_PARENT: '/home' }]) {
     const run = spawnSync(process.execPath, ['docs/manual/tools/capture-tutorial.mjs'], { cwd: new URL('..', import.meta.url).pathname, env: { ...process.env, ...env, CHROME_BIN: '/nonexistent' }, encoding: 'utf8', timeout: 20_000 });
     assert.notEqual(run.status, 0, JSON.stringify(env));
