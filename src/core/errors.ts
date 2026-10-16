@@ -17,6 +17,20 @@ export class AccountAdoptionRequiredError extends RepositoryConflictError {
   }
 }
 
+/**
+ * A user-actionable business rule refused the operation. Carries ONLY a stable code (the router returns it as the
+ * 409 body); the English message stays for logs and tests and is never sent to the browser.
+ */
+export const DOMAIN_REJECTION_CODES = ['automation_not_enabled', 'account_not_validated', 'account_send_hold'] as const;
+export type DomainRejectionCode = typeof DOMAIN_REJECTION_CODES[number];
+
+export class DomainRejectionError extends Error {
+  constructor(readonly code: DomainRejectionCode, message: string) {
+    super(message);
+    this.name = 'DomainRejectionError';
+  }
+}
+
 export class VaultKeyMissingError extends Error {
   constructor() {
     super('Vault key is missing while encrypted credentials exist; restore the key before continuing');

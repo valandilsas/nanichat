@@ -99,6 +99,10 @@ button:disabled { opacity: .45; cursor: not-allowed; }
 .btn-icon:hover:not(:disabled) { color: var(--text); background: var(--surface-2); border-color: var(--line-strong); }
 .btn-icon.ghost { border-color: transparent; background: transparent; }
 .btn-icon.ghost:hover:not(:disabled) { background: var(--surface-2); }
+.refresh-button { width: 36px; height: 36px; flex: none; }
+.refresh-button .spinning { animation: refresh-spin 900ms linear infinite; }
+@keyframes refresh-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .refresh-button .spinning { animation: none; } }
 .btn-icon.danger { color: var(--bad-text); }
 .btn-icon.danger:hover:not(:disabled) { background: var(--bad-soft); border-color: rgba(255, 92, 92, .4); color: var(--bad-text); }
 .chip-button { height: 24px; padding: 0 10px; border-radius: 999px; background: var(--ai-soft); color: var(--ai); font-size: 12px; }

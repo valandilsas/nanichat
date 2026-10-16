@@ -1,4 +1,4 @@
-import { AccountAdoptionRequiredError, PlatformFeatureNotSupportedError, PlatformNotSupportedError, ProviderRequestError } from '../core/errors.ts';
+import { AccountAdoptionRequiredError, DomainRejectionError, PlatformFeatureNotSupportedError, PlatformNotSupportedError, ProviderRequestError } from '../core/errors.ts';
 import { randomBytes } from 'node:crypto';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { DatabaseSync } from 'node:sqlite';
@@ -96,6 +96,7 @@ export function createApiHandler(deps: ApiDependencies) {
           ...(error.metaSubcode !== undefined ? { metaSubcode: error.metaSubcode } : {}),
         });
       }
+      if (error instanceof DomainRejectionError) return send(response, 409, { error: error.code });
       const status = error instanceof ApiError ? error.status : error instanceof TypeError ? 400 : 409;
       const code = error instanceof ApiError ? error.code
         : error instanceof AccountAdoptionRequiredError || error instanceof PlatformNotSupportedError || error instanceof PlatformFeatureNotSupportedError ? error.code

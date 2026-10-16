@@ -5,6 +5,7 @@ import { autoSelectAccount } from './account-filter';
 import { mediaLabel, mediaTypeLabel, shortCaption, shortId } from './media-label';
 import { shouldHandleShortcut, AI_COMPLAINT_HINT, AI_ERROR_LABELS, AI_LOCAL_PRIVACY_NOTE, AI_LOCAL_RESOURCE_NOTE, AI_PRIVACY_NOTICE, AI_WINDOW_LABELS, LOCAL_MODEL_INFO, aiReviewGate, localModelCardState, type DownloadView, type LocalModelEntryView, AUTO_HIDE_OPTIONS, aiJobSummary, aiProgressPercent, aiProgressText, availableActions, bulkAllowed, bulkSummary, categoryLabel, reasonsText, stateLabel as moderationStateLabel, type BulkResultView } from './moderation-labels';
 import { autoPickAutomation, describeQueuePayload, type PendingItem, type PendingPage } from './pending-review';
+import { DOMAIN_REJECTION_LABELS, realModeAction } from './automation-actions';
 import { GENERAL_MEDIA_OPTION, automationTargetLabel, automationTargetPayload } from './automation-scope';
 import { deriveOnboarding, showOnboarding as shouldShowOnboarding } from './onboarding';
 import { formatElapsed, progressPercent, progressText, reasonLabel, summarizeScan, type ScanProgressDto } from './scan-summary';
@@ -20,6 +21,7 @@ import {
 import { House, Plug, PlugZap, Images, Zap, Radio, Inbox, History, Settings2, CheckCircle2, AlertTriangle, XCircle, Circle, Image as ImageIcon, Clapperboard, Layers, RefreshCw, Pencil, Pause, Play, Archive, Trash2, Unplug, Search, ExternalLink, ShieldCheck, ShieldOff, Plus, ChevronRight, ShieldAlert, Eye, EyeOff, Sparkles, KeyRound, Download, Cpu, ChevronsUpDown, FlaskConical, MessageCircleHeart, Menu, X, Siren, ArrowRight, Send, Clock, Flag, Check, ScanEye, Undo2, ListFilter, FileDown, Lock, Rocket, ArrowLeft, BellDot, Users, Sun, Moon, CircleHelp } from 'lucide-react';
 import { AiRowSlot, PageActions, SlotContext } from './components/slots';
 import { Nani } from './components/Nani';
+import { RefreshButton } from './components/RefreshButton';
 import { TutorialSection } from './tutorial/TutorialSection';
 import { LiveFlow } from './components/LiveFlow';
 import { ModerationDeck } from './components/ModerationDeck';
@@ -292,6 +294,7 @@ export default function HomePage() {
           <button type="button" ref={menuButtonRef} className="btn-icon ghost menu-button" aria-label="Abrir menú" aria-controls="app-sidebar" aria-expanded={navOpen} onClick={() => setNavOpen(true)}><Menu size={18} /></button>
           <div className="topbar-title"><h1>{current[1]}</h1><p className="topbar-sub">{current[0] === 'connections' ? connectionsSubtitle(pickerAccounts) : current[2]}</p></div>
           <div className="topbar-actions" ref={setTopbarSlot} />
+          <RefreshButton loading={loading} onRefresh={() => void refresh()} />
         </header>
         <div className={`mode-banner ${mode}`}>
           {mode === 'checking' && <span>Verificando el modo de envío…</span>}
@@ -300,7 +303,7 @@ export default function HomePage() {
         </div>
         {loading && <div className="loading-line" role="status"><span>Actualizando datos locales…</span></div>}
         <div className={`content content-${section}`}>
-          {section === 'dashboard' && <DashboardView data={dashboard} accounts={accounts} connections={connections} automations={automations} queue={queue} mode={mode} nani={nani} pendingFlags={pendingFlags} reviewItems={reviewItems} accountFilter={accountFilter} accountCount={allAccounts.length} accountLabel={accountLabel} queueFiltered={queueState !== 'all' || queueOffset > 0} queueScope={queueScope} onNavigate={setSection} onRefresh={() => void refresh()} onCelebrate={celebrate} api={api} act={act} />}
+          {section === 'dashboard' && <DashboardView data={dashboard} accounts={accounts} connections={connections} automations={automations} queue={queue} mode={mode} nani={nani} pendingFlags={pendingFlags} reviewItems={reviewItems} accountFilter={accountFilter} accountCount={allAccounts.length} accountLabel={accountLabel} queueFiltered={queueState !== 'all' || queueOffset > 0} queueScope={queueScope} onNavigate={setSection} onCelebrate={celebrate} api={api} act={act} />}
           {section === 'connections' && <ConnectionsView connections={connections} accounts={accounts} candidates={candidates} setCandidates={setCandidates} api={api} act={act} confirm={confirm} features={features} />}
           {section === 'media' && <MediaView accounts={accounts} allAccounts={allAccounts} onSelectAccount={chooseAccount} media={media} selected={accountFilter} onNavigate={setSection} api={api} act={act} />}
           {section === 'automations' && <AutomationView accounts={accounts} media={media} rows={automations} selected={accountFilter} api={api} act={act} confirm={confirm} />}
@@ -311,7 +314,7 @@ export default function HomePage() {
           {section === 'queue' && <QueueView accounts={pickerAccounts} items={queue} total={queueTotal} offset={queueOffset} setOffset={setQueueOffset} state={queueState} setState={(value) => { setQueueOffset(0); setQueueState(value); }} onNavigate={setSection} api={api} act={act} />}
           {section === 'settings' && <SettingsView mode={mode} act={act} api={api} confirm={confirm} features={features} />}
         </div>
-        {section !== 'moderation' && <footer className="footer-note"><span><span className="status-dot" aria-hidden="true" /> Solo en este equipo · Datos y credenciales permanecen en el servidor local.</span><button className="btn-link" onClick={() => void refresh()}>Actualizar</button></footer>}
+        {section !== 'moderation' && <footer className="footer-note"><span><span className="status-dot" aria-hidden="true" /> Solo en este equipo · Datos y credenciales permanecen en el servidor local.</span></footer>}
       </main>
     </div>
     <div className="toast-region">
@@ -411,7 +414,7 @@ function CountUp({ value }: { value: number }) {
   return <span ref={ref} className="stat-v" aria-label={String(value)} />;
 }
 
-function DashboardView({ data, accounts, connections, automations, queue, mode, nani, pendingFlags, reviewItems, accountFilter, accountCount, accountLabel, queueFiltered, queueScope, onNavigate, onRefresh, onCelebrate, api, act }: { data: Dashboard | null; accounts: Account[]; connections: Connection[]; automations: Automation[]; queue: QueueItem[]; mode: 'checking' | 'dry' | 'real'; nani: NaniState; pendingFlags: number; reviewItems: number; accountFilter: string; accountCount: number; accountLabel: string; queueFiltered: boolean; queueScope: string; onNavigate(id: string): void; onRefresh(): void; onCelebrate(): void; api: Api; act: Act }) {
+function DashboardView({ data, accounts, connections, automations, queue, mode, nani, pendingFlags, reviewItems, accountFilter, accountCount, accountLabel, queueFiltered, queueScope, onNavigate, onCelebrate, api, act }: { data: Dashboard | null; accounts: Account[]; connections: Connection[]; automations: Automation[]; queue: QueueItem[]; mode: 'checking' | 'dry' | 'real'; nani: NaniState; pendingFlags: number; reviewItems: number; accountFilter: string; accountCount: number; accountLabel: string; queueFiltered: boolean; queueScope: string; onNavigate(id: string): void; onCelebrate(): void; api: Api; act: Act }) {
   useEffect(() => { if (data) statsCounted = true; }, [data]);
   if (!data) return <Empty title="Cargando datos locales…" detail="Si este mensaje no desaparece, revise que la aplicación local siga en ejecución." />;
   const total = (states: string[]) => data.queue.filter((row) => states.includes(row.state)).reduce((sum, row) => sum + row.count, 0);
@@ -423,7 +426,6 @@ function DashboardView({ data, accounts, connections, automations, queue, mode, 
   const shown = keywords.slice(0, 5);
   const sleeping = !data.monitoringEnabled;
   return <>
-    <PageActions><button className="btn" aria-label="Actualizar datos" onClick={onRefresh}><RefreshCw size={15} aria-hidden="true" /> <span className="btn-label">Actualizar datos</span></button></PageActions>
     <section className={`hero ${dataState}`} aria-labelledby="hero-say">
       <div className="hero-avatar"><span className="hero-glow" aria-hidden="true" /><Nani state={nani} size={180} follow /></div>
       <div className="speech">
@@ -614,7 +616,7 @@ function AutomationView({ accounts, media, rows, selected, api, act, confirm }: 
           {row.publicReplyEnabled && <Status value={`Respuesta pública · ${variantCountLabel(row.publicReplyVariants?.length ?? 0)}`} tone="neutral" />}
         </div>
         <div className="tile-actions">
-          <button className={row.realEnabled ? 'btn small' : 'btn btn-danger small'} onClick={() => void toggleReal(row)}>{row.realEnabled ? <ShieldOff size={15} aria-hidden="true" /> : <ShieldCheck size={15} aria-hidden="true" />} {row.realEnabled ? 'Quitar permiso real' : 'Autorizar real'}</button>
+          {(() => { const realAction = realModeAction(row); return <button className={row.realEnabled ? 'btn small' : 'btn btn-danger small'} disabled={realAction.disabled} title={realAction.hint} onClick={() => void toggleReal(row)}>{row.realEnabled ? <ShieldOff size={15} aria-hidden="true" /> : <ShieldCheck size={15} aria-hidden="true" />} {realAction.label}</button>; })()}
           <span className="tile-actions-icons">
             <button className="btn-icon" title={row.status === 'enabled' ? 'Pausar' : 'Activar'} aria-label={row.status === 'enabled' ? 'Pausar' : 'Activar'} onClick={() => void act(() => api(`/api/automations/${row.automationId}/enabled`, 'PATCH', { accountId: row.accountId, enabled: row.status !== 'enabled' }), row.status === 'enabled' ? 'Automatización pausada.' : 'Automatización activada con corte desde ahora.')}>{row.status === 'enabled' ? <Pause size={15} /> : <Play size={15} />}</button>
             <button className="btn-icon" title="Editar" aria-label="Editar" onClick={() => setEditing(row)}><Pencil size={15} /></button>
@@ -1052,7 +1054,7 @@ function ConnectionBadge({ status }: { status: string }) {
 }
 function Empty({ title, detail, action, actionLabel, primary, icon: Icon = Inbox, nani }: { title: string; detail: string; action?: () => void; actionLabel?: string; primary?: boolean; icon?: any; nani?: NaniState }) { return <div className={nani ? 'empty-state with-nani' : 'empty-state'}>{nani ? <Nani state={nani} size={84} decorative /> : <div className="empty-icon"><Icon size={20} strokeWidth={1.9} aria-hidden="true" /></div>}<strong>{title}</strong><p>{detail}</p>{action && <button className={primary ? 'button primary' : 'button secondary'} onClick={action}>{actionLabel}</button>}</div>; }
 function formatDate(value: string) { const date = new Date(value); return Number.isNaN(date.valueOf()) ? '—' : date.toLocaleString('es-CO', { dateStyle: 'medium', timeStyle: 'short' }); }
-function safeErrorLabel(code: string) { const labels: Record<string, string> = { account_not_found: 'La cuenta indicada no existe.', connection_not_found: 'La conexión indicada no existe.', invalid_request: 'Revise los campos e inténtelo de nuevo.', origin_or_csrf_rejected: 'La solicitud local no superó la protección de origen.', operation_rejected: 'La operación fue rechazada por una condición de seguridad o estado.', account_scan_failed: 'No se pudo completar el análisis para una cuenta.', follow_gate_invalid: 'La opción «Pedir primero que me sigan» no es válida.', follow_gate_message_invalid: 'Revise el «Mensaje previo»: es obligatorio, de hasta 640 caracteres y solo admite las variables indicadas.', follow_gate_button_title_invalid: 'Revise el «Título del botón»: de 1 a 20 caracteres, sin enlaces ni saltos de línea.', account_adoption_required: 'Esta cuenta pertenecía a una conexión eliminada o desconectada; confirme la adopción para conservar su historial.', follow_gate_retired: FOLLOW_GATE_RETIRED_LABEL, interactive_mode_retired: INTERACTIVE_RETIRED_LABEL, private_reply_not_failed: 'Solo se puede reintentar un mensaje privado que Meta rechazó.', private_reply_window_elapsed: 'Pasaron más de 7 días desde el comentario: Meta ya no permite la respuesta privada.', already_messaged: 'Esta persona ya tiene otro mensaje de esta automatización en la publicación.', ...ATTACHMENT_ERROR_LABELS, ...PLATFORM_ERROR_LABELS, ...AI_ERROR_LABELS }; return labels[code] ?? 'Revise el estado de la cuenta y vuelva a intentarlo.'; }
+function safeErrorLabel(code: string) { const labels: Record<string, string> = { account_not_found: 'La cuenta indicada no existe.', connection_not_found: 'La conexión indicada no existe.', invalid_request: 'Revise los campos e inténtelo de nuevo.', origin_or_csrf_rejected: 'La solicitud local no superó la protección de origen.', operation_rejected: 'La operación fue rechazada por una condición de seguridad o estado.', account_scan_failed: 'No se pudo completar el análisis para una cuenta.', follow_gate_invalid: 'La opción «Pedir primero que me sigan» no es válida.', follow_gate_message_invalid: 'Revise el «Mensaje previo»: es obligatorio, de hasta 640 caracteres y solo admite las variables indicadas.', follow_gate_button_title_invalid: 'Revise el «Título del botón»: de 1 a 20 caracteres, sin enlaces ni saltos de línea.', account_adoption_required: 'Esta cuenta pertenecía a una conexión eliminada o desconectada; confirme la adopción para conservar su historial.', follow_gate_retired: FOLLOW_GATE_RETIRED_LABEL, interactive_mode_retired: INTERACTIVE_RETIRED_LABEL, private_reply_not_failed: 'Solo se puede reintentar un mensaje privado que Meta rechazó.', private_reply_window_elapsed: 'Pasaron más de 7 días desde el comentario: Meta ya no permite la respuesta privada.', already_messaged: 'Esta persona ya tiene otro mensaje de esta automatización en la publicación.', ...ATTACHMENT_ERROR_LABELS, ...PLATFORM_ERROR_LABELS, ...DOMAIN_REJECTION_LABELS, ...AI_ERROR_LABELS }; return labels[code] ?? 'Revise el estado de la cuenta y vuelva a intentarlo.'; }
 
 export function ModerationView({ onCelebrate, flagCounts, accountFilter, allAccounts, onSelectAccount, onNavigate, api, act, confirm, mode }: { onCelebrate?: () => void; flagCounts?: Dashboard['moderation']; accountFilter: string; allAccounts: any[]; onSelectAccount: (id: string) => void; onNavigate: (id: string) => void; api: any; act: any; confirm: any; mode: string }) {
   const [settings, setSettings] = useState<any>(null);
