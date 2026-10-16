@@ -162,7 +162,7 @@ export class QueueService {
         commentId, text: comment.text ?? undefined, username: comment.username ?? undefined,
         createdAt: comment.created_at ?? undefined, parentId: comment.parent_id ?? undefined,
         ...(facebookPageId !== undefined ? { authorId: comment.author_igsid ?? undefined } : {}),
-      }, keywords.map(({ phrase }) => phrase), account.username, Date.now(), automation.match_mode,
+      }, keywords.map(({ phrase }) => phrase), account.username, this.clock(), automation.match_mode,
       facebookPageId !== undefined ? facebookHasOwnerReply(this.database, accountId, commentId, facebookPageId)
         : hasOwnerReply(this.database, accountId, commentId, account.username), facebookPageId);
       if (!classification.eligible || classification.matchedKeywords.length === 0) {

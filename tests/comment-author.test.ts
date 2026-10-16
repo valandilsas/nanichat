@@ -90,7 +90,7 @@ test('end to end: from.username-only root comment becomes eligible and renders {
     const now = Date.parse('2026-10-05T12:00:00Z');
     const report = await new Scanner(db, provider).scanMedia(account, 'media-1', { kind: 'backlog', now });
     assert.equal(report.candidates.find((c) => c.commentId === 'c1')?.eligible, true);
-    const queue = new QueueService(db, {} as never, { clock: () => Date.now() } as never);
+    const queue = new QueueService(db, {} as never, { clock: () => now } as never);
     assert.deepEqual(await queue.enqueueReviewed('account', id, ['c1']), ['c1']);
     const item = db.prepare(`SELECT payload_json FROM queue_items WHERE comment_id='c1'`).get() as { payload_json: string };
     assert.equal(JSON.parse(item.payload_json).text, 'Hi Maria');
