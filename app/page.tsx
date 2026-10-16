@@ -20,6 +20,7 @@ import {
 import { House, Plug, PlugZap, Images, Zap, Radio, Inbox, History, Settings2, CheckCircle2, AlertTriangle, XCircle, Circle, Image as ImageIcon, Clapperboard, Layers, RefreshCw, Pencil, Pause, Play, Archive, Trash2, Unplug, Search, ExternalLink, ShieldCheck, ShieldOff, Plus, ChevronRight, ShieldAlert, Eye, EyeOff, Sparkles, KeyRound, Download, Cpu, ChevronsUpDown, FlaskConical, MessageCircleHeart, Menu, X, Siren, ArrowRight, Send, Clock, Flag, Check, ScanEye, Undo2, ListFilter, FileDown, Lock, Rocket, ArrowLeft, BellDot, Users, Sun, Moon, CircleHelp } from 'lucide-react';
 import { AiRowSlot, PageActions, SlotContext } from './components/slots';
 import { Nani } from './components/Nani';
+import { RefreshButton } from './components/RefreshButton';
 import { TutorialSection } from './tutorial/TutorialSection';
 import { LiveFlow } from './components/LiveFlow';
 import { ModerationDeck } from './components/ModerationDeck';
@@ -292,6 +293,7 @@ export default function HomePage() {
           <button type="button" ref={menuButtonRef} className="btn-icon ghost menu-button" aria-label="Abrir menú" aria-controls="app-sidebar" aria-expanded={navOpen} onClick={() => setNavOpen(true)}><Menu size={18} /></button>
           <div className="topbar-title"><h1>{current[1]}</h1><p className="topbar-sub">{current[0] === 'connections' ? connectionsSubtitle(pickerAccounts) : current[2]}</p></div>
           <div className="topbar-actions" ref={setTopbarSlot} />
+          <RefreshButton loading={loading} onRefresh={() => void refresh()} />
         </header>
         <div className={`mode-banner ${mode}`}>
           {mode === 'checking' && <span>Verificando el modo de envío…</span>}
@@ -300,7 +302,7 @@ export default function HomePage() {
         </div>
         {loading && <div className="loading-line" role="status"><span>Actualizando datos locales…</span></div>}
         <div className={`content content-${section}`}>
-          {section === 'dashboard' && <DashboardView data={dashboard} accounts={accounts} connections={connections} automations={automations} queue={queue} mode={mode} nani={nani} pendingFlags={pendingFlags} reviewItems={reviewItems} accountFilter={accountFilter} accountCount={allAccounts.length} accountLabel={accountLabel} queueFiltered={queueState !== 'all' || queueOffset > 0} queueScope={queueScope} onNavigate={setSection} onRefresh={() => void refresh()} onCelebrate={celebrate} api={api} act={act} />}
+          {section === 'dashboard' && <DashboardView data={dashboard} accounts={accounts} connections={connections} automations={automations} queue={queue} mode={mode} nani={nani} pendingFlags={pendingFlags} reviewItems={reviewItems} accountFilter={accountFilter} accountCount={allAccounts.length} accountLabel={accountLabel} queueFiltered={queueState !== 'all' || queueOffset > 0} queueScope={queueScope} onNavigate={setSection} onCelebrate={celebrate} api={api} act={act} />}
           {section === 'connections' && <ConnectionsView connections={connections} accounts={accounts} candidates={candidates} setCandidates={setCandidates} api={api} act={act} confirm={confirm} features={features} />}
           {section === 'media' && <MediaView accounts={accounts} allAccounts={allAccounts} onSelectAccount={chooseAccount} media={media} selected={accountFilter} onNavigate={setSection} api={api} act={act} />}
           {section === 'automations' && <AutomationView accounts={accounts} media={media} rows={automations} selected={accountFilter} api={api} act={act} confirm={confirm} />}
@@ -311,7 +313,7 @@ export default function HomePage() {
           {section === 'queue' && <QueueView accounts={pickerAccounts} items={queue} total={queueTotal} offset={queueOffset} setOffset={setQueueOffset} state={queueState} setState={(value) => { setQueueOffset(0); setQueueState(value); }} onNavigate={setSection} api={api} act={act} />}
           {section === 'settings' && <SettingsView mode={mode} act={act} api={api} confirm={confirm} features={features} />}
         </div>
-        {section !== 'moderation' && <footer className="footer-note"><span><span className="status-dot" aria-hidden="true" /> Solo en este equipo · Datos y credenciales permanecen en el servidor local.</span><button className="btn-link" onClick={() => void refresh()}>Actualizar</button></footer>}
+        {section !== 'moderation' && <footer className="footer-note"><span><span className="status-dot" aria-hidden="true" /> Solo en este equipo · Datos y credenciales permanecen en el servidor local.</span></footer>}
       </main>
     </div>
     <div className="toast-region">
@@ -411,7 +413,7 @@ function CountUp({ value }: { value: number }) {
   return <span ref={ref} className="stat-v" aria-label={String(value)} />;
 }
 
-function DashboardView({ data, accounts, connections, automations, queue, mode, nani, pendingFlags, reviewItems, accountFilter, accountCount, accountLabel, queueFiltered, queueScope, onNavigate, onRefresh, onCelebrate, api, act }: { data: Dashboard | null; accounts: Account[]; connections: Connection[]; automations: Automation[]; queue: QueueItem[]; mode: 'checking' | 'dry' | 'real'; nani: NaniState; pendingFlags: number; reviewItems: number; accountFilter: string; accountCount: number; accountLabel: string; queueFiltered: boolean; queueScope: string; onNavigate(id: string): void; onRefresh(): void; onCelebrate(): void; api: Api; act: Act }) {
+function DashboardView({ data, accounts, connections, automations, queue, mode, nani, pendingFlags, reviewItems, accountFilter, accountCount, accountLabel, queueFiltered, queueScope, onNavigate, onCelebrate, api, act }: { data: Dashboard | null; accounts: Account[]; connections: Connection[]; automations: Automation[]; queue: QueueItem[]; mode: 'checking' | 'dry' | 'real'; nani: NaniState; pendingFlags: number; reviewItems: number; accountFilter: string; accountCount: number; accountLabel: string; queueFiltered: boolean; queueScope: string; onNavigate(id: string): void; onCelebrate(): void; api: Api; act: Act }) {
   useEffect(() => { if (data) statsCounted = true; }, [data]);
   if (!data) return <Empty title="Cargando datos locales…" detail="Si este mensaje no desaparece, revise que la aplicación local siga en ejecución." />;
   const total = (states: string[]) => data.queue.filter((row) => states.includes(row.state)).reduce((sum, row) => sum + row.count, 0);
@@ -423,7 +425,6 @@ function DashboardView({ data, accounts, connections, automations, queue, mode, 
   const shown = keywords.slice(0, 5);
   const sleeping = !data.monitoringEnabled;
   return <>
-    <PageActions><button className="btn" aria-label="Actualizar datos" onClick={onRefresh}><RefreshCw size={15} aria-hidden="true" /> <span className="btn-label">Actualizar datos</span></button></PageActions>
     <section className={`hero ${dataState}`} aria-labelledby="hero-say">
       <div className="hero-avatar"><span className="hero-glow" aria-hidden="true" /><Nani state={nani} size={180} follow /></div>
       <div className="speech">
