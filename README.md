@@ -302,7 +302,7 @@ Al arrancar, la base de datos se migra automáticamente al esquema nuevo. Una ve
 ## Documentación técnica
 
 - [docs/REFERENCIA-TECNICA.md](docs/REFERENCIA-TECNICA.md): arquitectura, esquema y migraciones, estados de la cola, programador, revisión pendiente, lectura de comprobación, respuesta pública, automatizaciones generales, modelo de seguridad y limitaciones conocidas.
-- [AGENTS.md](AGENTS.md): convenciones e invariantes para agentes de IA (y personas) que modifican el código.
+- [AGENTS.md](AGENTS.md): mapa del repositorio y comportamiento actual del producto, para agentes de IA (y personas) que modifican el código.
 - [docs/INSTALACION-CON-IA.md](docs/INSTALACION-CON-IA.md): instalación paso a paso y solución de problemas.
 
 ## Contribuir y ejecutar las pruebas
@@ -316,7 +316,7 @@ npm run typecheck   # verificación de tipos con TypeScript
 - `npm test` funciona igual en Windows: el propio Node expande el patrón `tests/*.test.ts`. Cada prueba tiene un límite de 120 s y `--test-force-exit` evita que un proceso que quedó abierto bloquee la corrida.
 - Para pasar más opciones a `node --test`, escríbelas antes del patrón (`node --import tsx --test --test-name-pattern="..." tests/*.test.ts`); `npm test -- --opcion` las pone después del patrón y Node las ignora.
 - `tests/server.test.ts` levanta el servidor en modo desarrollo en puertos libres elegidos al azar; si tienes un `npm run dev` abierto en la misma carpeta, Next.js lo rechaza con `Another next dev server is already running in this directory.` Detén el servidor de desarrollo antes de correr las pruebas.
-- El proyecto sigue TDD: primero una prueba que falla, luego el código. Lee [AGENTS.md](AGENTS.md) antes de enviar cambios.
+- Lee [AGENTS.md](AGENTS.md) antes de modificar el código.
 
 ## Licencia
 
