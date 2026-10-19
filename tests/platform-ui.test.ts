@@ -64,6 +64,7 @@ test('the Facebook Login help points to the guide and states Pages are on by def
   assert.match(text, /habilitada por defecto/iu);
   assert.match(text, /SOCIAL_DESK_FACEBOOK_PAGES=0/u);
   assert.doesNotMatch(text, /FACEBOOK_PAGES=1/u);
+  assert.doesNotMatch(text, /Instagram con Facebook Login/u);
   assert.doesNotMatch(PLATFORM_ERROR_LABELS.platform_not_supported!, /FACEBOOK_PAGES=1/u);
   assert.match(PLATFORM_ERROR_LABELS.platform_not_supported!, /SOCIAL_DESK_FACEBOOK_PAGES=0/u);
 });
