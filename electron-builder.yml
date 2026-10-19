@@ -52,7 +52,7 @@ nsis:
   installerLanguages: [es_ES]
   # User data lives in %LOCALAPPDATA%\SocialDesk (shared with the Inno Setup installer) and is never deleted.
   deleteAppDataOnUninstall: false
-  artifactName: SocialDesk-Setup-${version}.exe
+  artifactName: SocialDesk-Desktop-Setup-${version}.exe
 
 linux:
   target:

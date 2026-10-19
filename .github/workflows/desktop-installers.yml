@@ -139,7 +139,7 @@ jobs:
           path: |
             dist/*.AppImage
             dist/*.deb
-            dist/SocialDesk-Setup-*.exe
+            dist/SocialDesk-Desktop-Setup-*.exe
             dist/SHA256SUMS-desktop-*.txt
           if-no-files-found: error
           retention-days: 30
@@ -188,6 +188,6 @@ jobs:
           gh release upload "$TAG" \
             dist/*.AppImage \
             dist/*.deb \
-            dist/SocialDesk-Setup-*.exe \
+            dist/SocialDesk-Desktop-Setup-*.exe \
             dist/SHA256SUMS-desktop.txt \
             --clobber
