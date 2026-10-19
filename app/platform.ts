@@ -61,7 +61,7 @@ export const FACEBOOK_LOGIN_HELP = {
   guide: 'docs/GUIA-TOKEN-FACEBOOK.md',
   lines: [
     'Facebook Login usa un token de usuario para encontrar sus Páginas de Facebook y las cuentas de Instagram vinculadas.',
-    'La compatibilidad con Páginas de Facebook está habilitada por defecto; algunas partes no están verificadas (por ejemplo, la lectura de Instagram con Facebook Login). Si inició la aplicación con SOCIAL_DESK_FACEBOOK_PAGES=0, las Páginas no aparecen.',
+    'La compatibilidad con Páginas de Facebook está habilitada por defecto; algunas partes no están verificadas (por ejemplo, el envío de respuestas privadas de Instagram con Facebook Login). Si inició la aplicación con SOCIAL_DESK_FACEBOOK_PAGES=0, las Páginas no aparecen.',
   ],
 } as const;
 

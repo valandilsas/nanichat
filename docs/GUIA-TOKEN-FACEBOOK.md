@@ -118,7 +118,8 @@ Con el [Depurador de tokens de acceso](https://developers.facebook.com/tools/deb
 | Reescaneo de los mismos comentarios: no duplica el mensaje | **Verificado en vivo** |
 | Una respuesta privada **por comentario**: la misma persona con dos comentarios recibe dos mensajes | **Verificado en vivo** |
 | Comentarista con rol en la app: llega con `from` y Meta devuelve `can_reply_privately=false` (Revisión pendiente `private_reply_unavailable`, no se envía) | **Verificado en vivo** |
-| Instagram vinculado, leído con Facebook Login | **No verificado** |
+| Instagram vinculado, leído con Facebook Login (publicaciones y comentarios del reel) | **Verificado en vivo** |
+| Instagram vinculado: envío de la respuesta privada con Facebook Login | **No verificado** |
 | Botones de enlace | **No verificado** (por eso van como texto) |
 | Lectura del mensaje enviado (readback) | **No verificado** (no se afirma) |
 | Respuesta pública | **No verificado** (no disponible) |
