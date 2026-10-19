@@ -1,5 +1,5 @@
 'use strict';
-// Social Desk desktop shell (Electron main process).
+// NaniChat desktop shell (Electron main process).
 //
 // The web app is unchanged: the shell forks the normal production server (desktop/server-entry.mjs ->
 // scripts/start.mjs -> server.ts) with Electron's own binary acting as Node.js (ELECTRON_RUN_AS_NODE=1), waits for
@@ -18,6 +18,7 @@ const { readSettings, writeSettings } = require('./lib/settings.cjs');
 const { applyLinuxAutostart } = require('./lib/autostart.cjs');
 const { navigationDecision, appOriginFor } = require('./lib/navigation.cjs');
 const { waitForHealth, resumeMonitoring } = require('./lib/server-client.cjs');
+const { startupOutcome, isLockRefusal, startupFailureMessage } = require('./lib/startup.cjs');
 
 const sandboxDisabledForAppImage = shouldDisableChromiumSandbox({
   platform: process.platform,
@@ -29,7 +30,7 @@ if (sandboxDisabledForAppImage) {
   console.info('[desktop] Chromium sandbox disabled (--no-sandbox): running from Linux AppImage with kernel.apparmor_restrict_unprivileged_userns=1');
 }
 
-const APP_TITLE = 'Social Desk';
+const APP_TITLE = 'NaniChat';
 const APP_ID = 'com.socialdesk.app';
 const HEALTH_TIMEOUT_MS = 90_000;
 const STOP_TIMEOUT_MS = 15_000;
@@ -129,7 +130,7 @@ async function startServer() {
     return;
   }
   origin = appOriginFor(port);
-  appendLog(`Social Desk ${app.getVersion()} (Electron ${process.versions.electron}) starting the server on ${origin}, data ${paths.data}`);
+  appendLog(`NaniChat ${app.getVersion()} (Electron ${process.versions.electron}) starting the server on ${origin}, data ${paths.data}`);
   const logFd = fs.openSync(logPath, 'a');
   let child;
   try {
@@ -160,11 +161,21 @@ async function startServer() {
     timeoutMs: HEALTH_TIMEOUT_MS,
     shouldStop: () => serverChild !== child || child.exitCode !== null || child.signalCode !== null || quitting,
   });
-  if (quitting || serverChild !== child) return;
-  if (!ready) {
-    appendLog('the server did not become ready');
+  const exitedOnItsOwn = !expectingServerExit && (child.exitCode !== null || child.signalCode !== null);
+  const outcome = startupOutcome({
+    ready,
+    quitting,
+    childReplaced: serverChild !== child,
+    childExitedOnItsOwn: exitedOnItsOwn,
+  });
+  if (outcome === 'aborted') return;
+  if (outcome === 'failed') {
+    appendLog(exitedOnItsOwn ? 'the server exited before becoming ready' : 'the server did not become ready');
     await stopServer();
-    await failStartup(`Social Desk no pudo iniciar su servidor local en ${Math.round(HEALTH_TIMEOUT_MS / 1000)} segundos.`);
+    await failStartup(startupFailureMessage({
+      lockRefused: isLockRefusal(logTail()),
+      timeoutSeconds: Math.round(HEALTH_TIMEOUT_MS / 1000),
+    }));
     return;
   }
   serverReady = true;
@@ -201,7 +212,7 @@ async function onServerExit(child, code, signal) {
   const { response } = await dialog.showMessageBox({
     type: 'error',
     title: APP_TITLE,
-    message: 'El servidor de Social Desk se detuvo inesperadamente.',
+    message: 'El servidor de NaniChat se detuvo inesperadamente.',
     detail: `Registro: ${logPath}\n\nÚltimas líneas:\n${logTail()}`,
     buttons: ['Reiniciar', 'Salir'],
     defaultId: 0,
@@ -347,8 +358,8 @@ function showTrayHintOnce() {
   updateSettings({ trayHintShown: true });
   if (!Notification.isSupported()) return;
   new Notification({
-    title: 'Social Desk sigue funcionando',
-    body: 'Cerraste la ventana, pero Social Desk sigue abierto en la bandeja del sistema para seguir monitoreando. Para cerrarlo del todo, usa «Salir» en el icono de la bandeja o en el menú Archivo.',
+    title: 'NaniChat sigue funcionando',
+    body: 'Cerraste la ventana, pero NaniChat sigue abierto en la bandeja del sistema para seguir monitoreando. Para cerrarlo del todo, usa «Salir» en el icono de la bandeja o en el menú Archivo.',
     icon: iconPath(),
   }).show();
 }
@@ -361,7 +372,7 @@ function trayImage() {
 
 function trayMenu() {
   return Menu.buildFromTemplate([
-    { label: 'Abrir Social Desk', click: showMainWindow },
+    { label: 'Abrir NaniChat', click: showMainWindow },
     { label: 'Abrir en el navegador', enabled: serverReady, click: () => { if (origin) void shell.openExternal(origin); } },
     {
       label: 'Iniciar con el sistema',
@@ -432,7 +443,7 @@ function main() {
     await startServer();
   }).catch((error) => {
     appendLog(`startup error: ${error.stack ?? error.message}`);
-    dialog.showErrorBox(APP_TITLE, `Social Desk no pudo iniciar: ${error.message}`);
+    dialog.showErrorBox(APP_TITLE, `NaniChat no pudo iniciar: ${error.message}`);
     app.quit();
   });
 }

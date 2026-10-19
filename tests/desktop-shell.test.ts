@@ -110,6 +110,12 @@ const settingsMod = require('../desktop/lib/settings.cjs') as SettingsModule;
 const navigationMod = require('../desktop/lib/navigation.cjs') as NavigationModule;
 const serverClientMod = require('../desktop/lib/server-client.cjs') as ServerClientModule;
 const sandboxMod = require('../desktop/lib/sandbox.cjs') as SandboxModule;
+type StartupModule = {
+  startupOutcome(state: { ready: boolean; quitting: boolean; childReplaced: boolean; childExitedOnItsOwn: boolean }): 'ready' | 'aborted' | 'failed';
+  isLockRefusal(logTail: string): boolean;
+  startupFailureMessage(options: { lockRefused: boolean; timeoutSeconds: number }): string;
+};
+const startupMod = require('../desktop/lib/startup.cjs') as StartupModule;
 const afterPackMod = require('../packaging/desktop/after-pack.cjs') as AfterPackModule;
 
 async function loadMjs<T>(relativePath: string): Promise<T> {
@@ -189,16 +195,16 @@ test('Linux autostart writes and removes ~/.config/autostart/social-desk.desktop
     '/custom/cfg/autostart/social-desk.desktop',
   );
   assert.equal(
-    autostartMod.autostartExecutable({ env: { APPIMAGE: '/home/ana/Apps/Social Desk.AppImage' }, execPath: '/tmp/.mount_sd/usr/bin/social-desk' }),
-    '/home/ana/Apps/Social Desk.AppImage',
+    autostartMod.autostartExecutable({ env: { APPIMAGE: '/home/ana/Apps/My NaniChat.AppImage' }, execPath: '/tmp/.mount_sd/usr/bin/social-desk' }),
+    '/home/ana/Apps/My NaniChat.AppImage',
   );
   assert.equal(
-    autostartMod.autostartExecutable({ env: {}, execPath: '/opt/Social Desk/social-desk' }),
-    '/opt/Social Desk/social-desk',
+    autostartMod.autostartExecutable({ env: {}, execPath: '/opt/My NaniChat/social-desk' }),
+    '/opt/My NaniChat/social-desk',
   );
 
   const file = autostartMod.applyLinuxAutostart(true, {
-    env: { APPIMAGE: '/home/ana/Apps/Social Desk.AppImage' },
+    env: { APPIMAGE: '/home/ana/Apps/My NaniChat.AppImage' },
     homedir: temp,
     execPath: '/usr/bin/social-desk',
   });
@@ -206,7 +212,7 @@ test('Linux autostart writes and removes ~/.config/autostart/social-desk.desktop
   assert.equal(file, posix.join(temp, '.config', 'autostart', 'social-desk.desktop'));
   const content = readFileSync(file, 'utf8');
   assert.match(content, /^\[Desktop Entry\]\n/u);
-  assert.match(content, /^Exec="\/home\/ana\/Apps\/Social Desk\.AppImage" --hidden$/mu);
+  assert.match(content, /^Exec="\/home\/ana\/Apps\/My NaniChat\.AppImage" --hidden$/mu);
   assert.match(content, /^X-GNOME-Autostart-enabled=true$/mu);
 
   autostartMod.applyLinuxAutostart(false, { env: {}, homedir: temp, execPath: '/usr/bin/social-desk' });
@@ -309,7 +315,7 @@ test('shouldDisableChromiumSandbox only disables the sandbox for a Linux AppImag
   assert.equal(
     sandboxMod.shouldDisableChromiumSandbox({
       platform: 'linux',
-      env: { APPIMAGE: '/home/ana/Apps/SocialDesk-0.2.1-x86_64.AppImage' },
+      env: { APPIMAGE: '/home/ana/Apps/NaniChat-0.2.1-x86_64.AppImage' },
       apparmorRestrictUserns: '1\n',
     }),
     true,
@@ -415,7 +421,7 @@ test('desktop prune rules, esbuild guard and afterPack enforce target platform b
     electronPlatformName: 'linux',
     arch: 1, // x64
     appOutDir: linuxOut,
-    packager: { appInfo: { productFilename: 'Social Desk' } },
+    packager: { appInfo: { productFilename: 'NaniChat' } },
   });
   assert.equal(existsSync(join(linuxApp, 'node_modules', '@esbuild', 'linux-x64')), true);
   assert.equal(existsSync(join(linuxApp, 'node_modules', '@esbuild', 'win32-x64')), false);
@@ -436,7 +442,7 @@ test('desktop prune rules, esbuild guard and afterPack enforce target platform b
         electronPlatformName: 'win32',
         arch: 1, // x64
         appOutDir: winOut,
-        packager: { appInfo: { productFilename: 'Social Desk' } },
+        packager: { appInfo: { productFilename: 'NaniChat' } },
       }),
     /afterPack: @esbuild\/win32-x64 is missing from packaged node_modules/u,
   );
@@ -448,4 +454,30 @@ test('desktop prune rules, esbuild guard and afterPack enforce target platform b
   assert.equal(png.subarray(12, 16).toString('ascii'), 'IHDR');
   assert.equal(png.readUInt32BE(16), 512, 'PNG width 512');
   assert.equal(png.readUInt32BE(20), 512, 'PNG height 512');
+});
+
+const { startupOutcome, isLockRefusal, startupFailureMessage } = startupMod;
+
+test('startupOutcome never lets a server that died by itself during startup end silently', () => {
+  const base = { ready: false, quitting: false, childReplaced: false, childExitedOnItsOwn: false };
+  assert.equal(startupOutcome({ ...base, ready: true }), 'ready');
+  assert.equal(startupOutcome({ ...base, quitting: true }), 'aborted');
+  assert.equal(startupOutcome({ ...base, childReplaced: true }), 'aborted');
+  assert.equal(startupOutcome({ ...base }), 'failed'); // health timeout
+  // The reported bug: onServerExit cleared serverChild (childReplaced looks true) after the child exited on its own.
+  assert.equal(startupOutcome({ ...base, childReplaced: true, childExitedOnItsOwn: true }), 'failed');
+  assert.equal(startupOutcome({ ...base, childExitedOnItsOwn: true }), 'failed');
+  // Quitting always wins over a self-exit.
+  assert.equal(startupOutcome({ ...base, quitting: true, childExitedOnItsOwn: true }), 'aborted');
+});
+
+test('isLockRefusal detects the application lock refusal and startupFailureMessage explains it in Spanish', () => {
+  assert.equal(isLockRefusal('Error: Application data directory is already running or ownership is uncertain\n  at x'), true);
+  assert.equal(isLockRefusal('EADDRINUSE'), false);
+  assert.equal(isLockRefusal(''), false);
+  const lock = startupFailureMessage({ lockRefused: true, timeoutSeconds: 90 });
+  assert.match(lock, /ya está abierto/);
+  assert.match(lock, /Detener NaniChat/);
+  assert.match(lock, /Archivo > Salir/);
+  assert.match(startupFailureMessage({ lockRefused: false, timeoutSeconds: 90 }), /90 segundos/);
 });
