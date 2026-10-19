@@ -1,6 +1,6 @@
 {
   "name": "local-social-automation",
-  "version": "0.2.3",
+  "version": "0.2.4",
   "description": "Respuestas automáticas a comentarios de Instagram, en tu propia computadora",
   "license": "MIT",
   "private": true,
