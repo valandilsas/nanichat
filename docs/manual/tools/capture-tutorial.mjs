@@ -7,7 +7,7 @@
  *   node docs/manual/tools/capture-tutorial.mjs
  *
  * Safety: random free port (never 3000/3100), data dirs under /tmp, writes ONLY public/tutorial/<platform>/<step-id>.png
- * (see capture-guards.mjs). SOCIAL_DESK_FACEBOOK_PAGES=1 is set only for the demo server process of the Facebook phase.
+ * (see capture-guards.mjs). Facebook Pages are on by default in the app, so the demo server of the Instagram phase gets SOCIAL_DESK_FACEBOOK_PAGES=0 (Instagram-only discovery) and only the Facebook phase leaves them on.
  * Only the processes started here are stopped (by PID); temp dirs and the Chrome profile are removed at the end.
  * Env: CHROME_BIN, CAPTURE_DEBUG=1, TUTORIAL_CAPTURE_PORT (testing the guards), TUTORIAL_CAPTURE_DATA_PARENT (idem).
  */
@@ -64,7 +64,7 @@ async function freePort() {
 async function startServer(dataDir, extraEnv = {}) {
   const child = spawnTracked('demo-server', process.execPath, ['--import', 'tsx', 'docs/manual/tools/demo-server.ts'], {
     cwd: ROOT,
-    env: { ...process.env, NODE_ENV: 'production', PORT: String(PORT), LOCAL_SOCIAL_DATA_DIR: dataDir, SOCIAL_DESK_FACEBOOK_PAGES: '', ...extraEnv },
+    env: { ...process.env, NODE_ENV: 'production', PORT: String(PORT), LOCAL_SOCIAL_DATA_DIR: dataDir, SOCIAL_DESK_FACEBOOK_PAGES: '0', ...extraEnv },
   });
   const entry = children.find((item) => item.child === child);
   for (let attempt = 0; attempt < 120; attempt++) {

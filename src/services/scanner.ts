@@ -35,7 +35,7 @@ export class Scanner {
   constructor(
     private readonly database: DatabaseSync,
     private readonly provider: Pick<SocialProvider, 'listComments'>,
-    /** `facebookPagesAvailable` carries the SOCIAL_DESK_FACEBOOK_PAGES opt-in (tests may override it). */
+    /** `facebookPagesAvailable` carries the SOCIAL_DESK_FACEBOOK_PAGES switch, on by default (tests may override it). */
     private readonly options: { facebookPagesAvailable?: boolean } = {},
   ) {}
 

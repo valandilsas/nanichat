@@ -26,7 +26,8 @@ import { createApiHandler } from '../../../src/http/router.ts';
 import { DemoProvider, assertDemoDataDir } from './demo-provider.ts';
 
 const dataDir = assertDemoDataDir(process.env.LOCAL_SOCIAL_DATA_DIR);
-// SOCIAL_DESK_FACEBOOK_PAGES is honoured only here (demo process): it lets the tutorial captures show a fictitious Page.
+// SOCIAL_DESK_FACEBOOK_PAGES is forwarded only here (demo process): Pages are on by default, so the capture script passes '0' for
+// the Instagram phase and '1' for the Facebook phase, which shows a fictitious Page.
 const config = loadConfig({ PORT: process.env.PORT, LOCAL_SOCIAL_DATA_DIR: dataDir, SOCIAL_DESK_FACEBOOK_PAGES: process.env.SOCIAL_DESK_FACEBOOK_PAGES }, process.cwd());
 if (config.port === 3000) throw new Error('Refusing to start the demo on port 3000 (reserved for the real app)');
 

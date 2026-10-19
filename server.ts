@@ -28,7 +28,7 @@ const applicationLock = acquireApplicationLock(config.dataDir);
 const database = openDatabase(config.dataDir);
 migrateDatabase(database);
 const vault = createVault(config.dataDir, () => listEncryptedCredentials(database));
-// Opt-in (SOCIAL_DESK_FACEBOOK_PAGES=1, EXPERIMENTAL): Facebook Page accounts stay dormant unless it is set.
+// Facebook Page accounts are on by default; SOCIAL_DESK_FACEBOOK_PAGES=0 (or false) is the kill switch.
 const facebookPages = { facebookPagesAvailable: config.facebookPages };
 const provider = new MetaProvider(database, vault, fetch, facebookPages);
 // Opt-in (SOCIAL_DESK_LEGACY_ACCOUNTS_DIR / SOCIAL_DESK_LEGACY_HOLD_USERNAMES): undefined means no legacy file is ever read.

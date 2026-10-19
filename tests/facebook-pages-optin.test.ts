@@ -12,18 +12,18 @@ import { createVault } from '../src/security/vault.ts';
 import { FACEBOOK_PAGES_AVAILABLE, facebookPagesAvailable } from '../src/services/facebook-pages-rules.ts';
 import { removeTempDir } from './helpers/tmp.ts';
 
-test('SOCIAL_DESK_FACEBOOK_PAGES: only "1" or "true" (any case, trimmed) enables Facebook Pages', () => {
-  assert.equal(loadConfig({}, '/app').facebookPages, false);
-  for (const on of ['1', 'true', 'TRUE', 'True', ' 1 ', ' true\n']) {
+test('SOCIAL_DESK_FACEBOOK_PAGES: Facebook Pages are on by default and only "0"/"false" (any case, trimmed) turn them off', () => {
+  assert.equal(loadConfig({}, '/app').facebookPages, true);
+  for (const on of ['', '1', 'true', 'TRUE', 'yes', 'on', '2', 'enable', 'garbage']) {
     assert.equal(loadConfig({ SOCIAL_DESK_FACEBOOK_PAGES: on }, '/app').facebookPages, true, on);
   }
-  for (const off of ['', '0', 'false', 'yes', 'on', 'si', '2', 'truee', 'enable']) {
+  for (const off of ['0', 'false', 'FALSE', 'False', ' 0 ', ' false\n']) {
     assert.equal(loadConfig({ SOCIAL_DESK_FACEBOOK_PAGES: off }, '/app').facebookPages, false, off);
   }
 });
 
-test('the env opt-in never touches the constant default', () => {
-  loadConfig({ SOCIAL_DESK_FACEBOOK_PAGES: '1' }, '/app');
+test('the env switch never touches the constant default', () => {
+  loadConfig({ SOCIAL_DESK_FACEBOOK_PAGES: '0' }, '/app');
   assert.equal(FACEBOOK_PAGES_AVAILABLE, false);
   assert.equal(facebookPagesAvailable(), false);
 });
@@ -37,7 +37,7 @@ test('server.ts hands the opt-in to the provider, connections, scanner, schedule
   }
 });
 
-test('with the env flag on, a mock Page flows through discovery', async () => {
+test('by default a mock Page flows through discovery; the kill switch hides it', async () => {
   const directory = mkdtempSync(join(tmpdir(), 'social-fboptin-'));
   const db = openDatabase(directory);
   try {
@@ -54,10 +54,10 @@ test('with the env flag on, a mock Page flows through discovery', async () => {
       }
       return new Response(JSON.stringify({ id: 'page-1' }), { status: 200 });
     }) as typeof fetch;
-    const enabled = loadConfig({ SOCIAL_DESK_FACEBOOK_PAGES: 'TRUE' }, '/app').facebookPages;
+    const enabled = loadConfig({}, '/app').facebookPages;
     const found = await new MetaProvider(db, vault, fetcher, { facebookPagesAvailable: enabled }).discoverAccounts('fb');
     assert.deepEqual(found.map((account) => [account.providerAccountId, account.platform]), [['page-1', 'facebook']]);
-    const off = await new MetaProvider(db, vault, fetcher, { facebookPagesAvailable: loadConfig({}, '/app').facebookPages }).discoverAccounts('fb');
+    const off = await new MetaProvider(db, vault, fetcher, { facebookPagesAvailable: loadConfig({ SOCIAL_DESK_FACEBOOK_PAGES: '0' }, '/app').facebookPages }).discoverAccounts('fb');
     assert.deepEqual(off, []);
   } finally { db.close(); removeTempDir(directory); }
 });

@@ -61,7 +61,7 @@ export const FACEBOOK_LOGIN_HELP = {
   guide: 'docs/GUIA-TOKEN-FACEBOOK.md',
   lines: [
     'Facebook Login usa un token de usuario para encontrar sus Páginas de Facebook y las cuentas de Instagram vinculadas.',
-    'La compatibilidad con Páginas de Facebook es experimental: para que aparezcan las Páginas hay que iniciar la aplicación con SOCIAL_DESK_FACEBOOK_PAGES=1.',
+    'La compatibilidad con Páginas de Facebook está habilitada por defecto; algunas partes no están verificadas (por ejemplo, la lectura de Instagram con Facebook Login). Si inició la aplicación con SOCIAL_DESK_FACEBOOK_PAGES=0, las Páginas no aparecen.',
   ],
 } as const;
 
@@ -82,7 +82,7 @@ export function readbackHint(code?: string): string {
 
 /** Spanish labels for the platform / Facebook error codes that can reach the UI. */
 export const PLATFORM_ERROR_LABELS: Record<string, string> = {
-  platform_not_supported: 'Esta cuenta es de una plataforma que no está habilitada. Para usar Páginas de Facebook inicie la aplicación con SOCIAL_DESK_FACEBOOK_PAGES=1.',
+  platform_not_supported: 'Esta cuenta es de una plataforma que no está habilitada: la aplicación se inició con SOCIAL_DESK_FACEBOOK_PAGES=0, que apaga las Páginas de Facebook. Quite esa variable y reinicie para usarlas.',
   platform_feature_not_supported: 'Esta función aún no está disponible para cuentas de Facebook.',
   private_reply_unavailable: 'Meta indica que este comentario no admite respuesta privada.',
   readback_not_available_for_platform: 'Facebook no permite verificar el mensaje enviado; se confirma con la respuesta de Meta.',

@@ -2,12 +2,12 @@ import { type AccountPlatform } from '../core/domain.ts';
 import { PlatformNotSupportedError } from '../core/errors.ts';
 
 /**
- * CENTRAL SWITCH — Facebook Page accounts ship DORMANT. While this is false, `facebook_login` discovery returns exactly
- * what it returned before (linked Instagram accounts only) and every service refuses a Page account
- * (`platform_not_supported`). The Page comment engine (read, private reply, owner detection) exists behind it but has
- * not been verified end to end in a real environment. No code path may call an Instagram endpoint with a Page account
- * regardless of this switch. Do NOT flip this constant: the opt-in is the EXPERIMENTAL env var SOCIAL_DESK_FACEBOOK_PAGES=1
- * (parsed in src/core/config.ts and passed to the services as `facebookPagesAvailable`).
+ * Facebook Page accounts are ON by default in the app: `loadConfig` turns the env var SOCIAL_DESK_FACEBOOK_PAGES into
+ * `facebookPages` (on unless it is "0"/"false", the kill switch) and passes it to the services as
+ * `facebookPagesAvailable`. This constant is only the fallback for a caller that passes no option, and it stays false:
+ * a service built without the option refuses a Page account (`platform_not_supported`) and `facebook_login` discovery
+ * returns linked Instagram accounts only. No code path may call an Instagram endpoint with a Page account regardless
+ * of this switch. Do NOT flip this constant.
  */
 export const FACEBOOK_PAGES_AVAILABLE = false;
 

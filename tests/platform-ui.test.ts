@@ -56,13 +56,16 @@ test('Facebook copy is honest about public reply, moderation, buttons, username 
   assert.doesNotMatch(FACEBOOK_READBACK_NOTE, /verificado|confirmada/iu);
 });
 
-test('the Facebook Login help points to the guide and states the experimental opt-in', () => {
+test('the Facebook Login help points to the guide and states Pages are on by default with a kill switch', () => {
   const text = FACEBOOK_LOGIN_HELP.lines.join(' ');
   assert.equal(FACEBOOK_LOGIN_HELP.guide, 'docs/GUIA-TOKEN-FACEBOOK.md');
   assert.match(text, /token de usuario/u);
   assert.match(text, /Instagram vinculadas/u);
-  assert.match(text, /experimental/iu);
-  assert.match(text, /SOCIAL_DESK_FACEBOOK_PAGES=1/u);
+  assert.match(text, /habilitada por defecto/iu);
+  assert.match(text, /SOCIAL_DESK_FACEBOOK_PAGES=0/u);
+  assert.doesNotMatch(text, /FACEBOOK_PAGES=1/u);
+  assert.doesNotMatch(PLATFORM_ERROR_LABELS.platform_not_supported!, /FACEBOOK_PAGES=1/u);
+  assert.match(PLATFORM_ERROR_LABELS.platform_not_supported!, /SOCIAL_DESK_FACEBOOK_PAGES=0/u);
 });
 
 test('every new Facebook error code has a Spanish label', () => {

@@ -56,7 +56,7 @@ export class ConnectionService {
     private readonly database: DatabaseSync,
     private readonly vault: CredentialVault,
     private readonly provider: AccountCredentialProvider,
-    /** `facebookPagesAvailable` carries the SOCIAL_DESK_FACEBOOK_PAGES opt-in (tests may override it). */
+    /** `facebookPagesAvailable` carries the SOCIAL_DESK_FACEBOOK_PAGES switch, on by default (tests may override it). */
     private readonly options: { facebookPagesAvailable?: boolean } = {},
   ) {}
 

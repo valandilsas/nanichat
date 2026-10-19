@@ -14,7 +14,7 @@ export type AppConfig = {
   legacyHoldUsernames: string[];
   /** SOCIAL_DESK_IMPORT_ENV_PATH: the only file the explicit `.env` import may read; null = import disabled. */
   importEnvPath: string | null;
-  /** SOCIAL_DESK_FACEBOOK_PAGES: EXPERIMENTAL opt-in ("1"/"true"); false = Facebook Pages stay dormant (default). */
+  /** SOCIAL_DESK_FACEBOOK_PAGES: Facebook Pages are on by default; "0"/"false" is the kill switch that keeps them dormant. */
   facebookPages: boolean;
 };
 
@@ -32,7 +32,7 @@ export function loadConfig(env: Readonly<Record<string, string | undefined>> = {
     legacyAccountsDir: optionalPath(env.SOCIAL_DESK_LEGACY_ACCOUNTS_DIR, appRoot),
     legacyHoldUsernames: usernameList(env.SOCIAL_DESK_LEGACY_HOLD_USERNAMES),
     importEnvPath: optionalPath(env.SOCIAL_DESK_IMPORT_ENV_PATH, appRoot),
-    facebookPages: optIn(env.SOCIAL_DESK_FACEBOOK_PAGES),
+    facebookPages: !killSwitch(env.SOCIAL_DESK_FACEBOOK_PAGES),
   };
 }
 
@@ -41,10 +41,10 @@ export function normalizeUsername(value: string): string {
   return value.normalize('NFC').trim().replace(/^@/u, '').toLocaleLowerCase('und');
 }
 
-/** Strict opt-in: only "1" or "true" (case-insensitive, trimmed) enable; anything else, including garbage, keeps it off. */
-function optIn(value: string | undefined): boolean {
+/** Kill switch: only "0" or "false" (case-insensitive, trimmed) turn the feature off; unset or anything else leaves it on. */
+function killSwitch(value: string | undefined): boolean {
   const normalized = value?.trim().toLowerCase();
-  return normalized === '1' || normalized === 'true';
+  return normalized === '0' || normalized === 'false';
 }
 
 function optionalPath(value: string | undefined, appRoot: string): string | null {

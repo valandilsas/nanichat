@@ -34,7 +34,7 @@ export const DEMO_ACCOUNTS: DiscoveredAccount[] = [
 
 /**
  * Fictitious Facebook Login discovery for the tutorial captures: one Page plus the Instagram account linked to it.
- * Only returned when the demo server runs with SOCIAL_DESK_FACEBOOK_PAGES=1 and the connection is Facebook Login.
+ * Only returned when the demo server runs with Facebook Pages enabled (not SOCIAL_DESK_FACEBOOK_PAGES=0) and the connection is Facebook Login.
  */
 export const DEMO_FACEBOOK_ACCOUNTS: DiscoveredAccount[] = [
   { providerAccountId: '100000000000001', username: 'Tu Página de ejemplo', displayName: 'Tu Página de ejemplo', accountType: 'PAGE', relatedPageId: '100000000000001', platform: 'facebook', capabilities: ['identity_read', 'page_task:MODERATE', 'page_task:MESSAGING'] },

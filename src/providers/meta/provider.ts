@@ -62,7 +62,7 @@ export class MetaProvider implements SocialProvider {
     private readonly database: DatabaseSync,
     private readonly vault: CredentialVault,
     private readonly fetcher: typeof fetch = fetch,
-    /** `facebookPagesAvailable` carries the SOCIAL_DESK_FACEBOOK_PAGES opt-in (tests may override it). */
+    /** `facebookPagesAvailable` carries the SOCIAL_DESK_FACEBOOK_PAGES switch, on by default (tests may override it). */
     private readonly options: { diagnosticSpacingMs?: number; facebookPagesAvailable?: boolean } = {},
   ) {}
 

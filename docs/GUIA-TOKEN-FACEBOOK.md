@@ -1,8 +1,8 @@
-# Guía del token de Facebook (Páginas) — EXPERIMENTAL
+# Guía del token de Facebook (Páginas)
 
 Esta guía explica cómo conseguir el token que Social Desk necesita para responder por mensaje privado a los comentarios de una **Página de Facebook**. Sigue la misma lógica que el capítulo 5 del [manual de usuario](manual/Manual-Social-Desk.pdf) («Conseguir el acceso con Facebook»), pero pensada para Páginas.
 
-> **Experimental y apagado por defecto.** La compatibilidad con Páginas de Facebook solo aparece si inicias la aplicación con `SOCIAL_DESK_FACEBOOK_PAGES=1` (ver [README](../README.md#variables-de-entorno)). Sin esa variable, «Probar y descubrir» solo lista cuentas de Instagram, exactamente como antes. Lee antes la sección [Qué está verificado y qué no](#qué-está-verificado-y-qué-no).
+> **Habilitado por defecto, con partes sin verificar.** La compatibilidad con Páginas de Facebook está habilitada: no necesitas definir ninguna variable. Si inicias la aplicación con `SOCIAL_DESK_FACEBOOK_PAGES=0` (o `false`), «Probar y descubrir» solo lista cuentas de Instagram (ver [README](../README.md#variables-de-entorno)). Lee antes la sección [Qué está verificado y qué no](#qué-está-verificado-y-qué-no).
 
 ## Contenido
 
@@ -91,7 +91,7 @@ Con el [Depurador de tokens de acceso](https://developers.facebook.com/tools/deb
 
 ## Pegarlo en Social Desk
 
-1. Inicia la aplicación con `SOCIAL_DESK_FACEBOOK_PAGES=1` (por ejemplo, en PowerShell: `$env:SOCIAL_DESK_FACEBOOK_PAGES = "1"; npm start`).
+1. Inicia la aplicación como siempre (las Páginas vienen habilitadas; si definiste `SOCIAL_DESK_FACEBOOK_PAGES=0`, quítala y reinicia).
 2. En **Conexiones > Nueva conexión**, elige **Facebook Login · token de usuario y página vinculada**, escribe un nombre y pega el token en el campo oculto. Guarda la conexión.
 3. Pulsa **Probar y descubrir**. Verás tus Páginas (con la insignia «Facebook») y, si las hay, las cuentas de Instagram vinculadas.
 4. Pulsa **Seleccionar** en la Página que quieres administrar.
@@ -103,7 +103,8 @@ Con el [Depurador de tokens de acceso](https://developers.facebook.com/tools/deb
 - **Botones de enlace:** en Facebook se envían como **texto simple** (título y dirección en líneas del mensaje).
 - **Sin respuesta pública, sin moderación y sin ocultar/borrar** para Páginas todavía: la aplicación lo rechaza con `platform_feature_not_supported` y la interfaz lo indica.
 - **Sin lectura verificada del mensaje:** Meta no ofrece una forma verificada de leer el mensaje enviado. La interfaz dice «Facebook no permite verificar el mensaje enviado; se confirma con la respuesta de Meta». Nunca se muestra como verificado.
-- **Una respuesta privada por persona**, según Meta.
+- **Una respuesta privada por comentario**, según Meta: si la misma persona comenta dos veces, recibe dos mensajes.
+- **Quien comenta con rol en tu app (o usa la app)** llega con autor y Meta responde `can_reply_privately=false`: queda en Revisión pendiente como `private_reply_unavailable` y no se envía nada.
 - **Ventana de 7 días** desde el comentario; después el elemento expira.
 - **Otra automatización compite por la única respuesta privada.** Si otra herramienta (por ejemplo, Meta Business Suite) responde a los mismos comentarios, la que llegue primero consume la única respuesta privada. **Desactívala antes** de usar Social Desk en esa Página.
 - **Resultado dudoso (`UNKNOWN_OUTCOME`):** nunca se reintenta automáticamente; lo resuelves tú a mano.
@@ -113,12 +114,15 @@ Con el [Depurador de tokens de acceso](https://developers.facebook.com/tools/deb
 | Función | Estado |
 | --- | --- |
 | Leer publicaciones y comentarios con el token de Página, incluidos los comentarios de personas sin rol (llegan **sin** `from`) | **Verificado en vivo** (2026-10-14) |
-| Respuesta privada a una persona sin rol: aceptada por Meta y **entregada**, con la app en modo Live y los permisos de página en «Listo para la prueba» | **Verificado en vivo** (2026-10-14) |
+| Respuesta privada a una persona sin rol: aceptada por Meta y **entregada** a Messenger (aparece en «Solicitudes de mensajes» de la persona), con la app en modo Live y los permisos de página en «Listo para la prueba» | **Verificado en vivo** |
+| Reescaneo de los mismos comentarios: no duplica el mensaje | **Verificado en vivo** |
+| Una respuesta privada **por comentario**: la misma persona con dos comentarios recibe dos mensajes | **Verificado en vivo** |
+| Comentarista con rol en la app: llega con `from` y Meta devuelve `can_reply_privately=false` (Revisión pendiente `private_reply_unavailable`, no se envía) | **Verificado en vivo** |
+| Instagram vinculado, leído con Facebook Login | **No verificado** |
 | Botones de enlace | **No verificado** (por eso van como texto) |
 | Lectura del mensaje enviado (readback) | **No verificado** (no se afirma) |
 | Respuesta pública | **No verificado** (no disponible) |
 | Ocultar o borrar comentarios | **No verificado** (no disponible) |
-| Segundo comentario de la misma persona | **No verificado** |
 | Webhooks | **No verificado** (la aplicación solo sondea) |
 | Límites de uso (rate limits) | **No verificado** |
 
@@ -127,7 +131,7 @@ Con el [Depurador de tokens de acceso](https://developers.facebook.com/tools/deb
 Copia este bloque en tu asistente para que te acompañe **paso a paso**:
 
 ```text
-Quiero conseguir el token de Facebook para usar una Página con Social Desk (función experimental).
+Quiero conseguir el token de Facebook para usar una Página con Social Desk (la compatibilidad con Páginas está habilitada por defecto, pero algunas partes no están verificadas).
 
 Lee completa la guía docs/GUIA-TOKEN-FACEBOOK.md del repositorio de Social Desk antes de ayudarme y úsala como única fuente, junto con la documentación oficial de Meta.
 
