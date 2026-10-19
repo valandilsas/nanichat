@@ -542,5 +542,11 @@ export const TUTORIALS: Record<TutorialPlatformId, TutorialPlatformContent> = {
   facebook: { id: 'facebook', label: 'Facebook', steps: facebookSteps },
 };
 
+/** Order of the platform cards: Facebook first, because one Facebook token also manages the linked Instagram accounts. */
+export const TUTORIAL_CARD_ORDER: ReadonlyArray<TutorialPlatformId> = ['facebook', 'instagram'];
+
+/** Subtle note under the platform cards. */
+export const TUTORIAL_TOKEN_NOTE = 'Con un token de Facebook también puedes manejar Instagram (la cuenta debe ser profesional y estar vinculada a una Página), así que no necesitas un token aparte de Instagram.';
+
 /** TikTok is announced only: no steps, no content. */
 export const COMING_SOON_PLATFORMS: ReadonlyArray<{ id: 'tiktok'; label: string }> = [{ id: 'tiktok', label: 'TikTok' }];

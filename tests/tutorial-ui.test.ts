@@ -18,6 +18,15 @@ test('the Tutorial block renders Instagram and Facebook cards and a visibly disa
   assert.doesNotMatch(markup, /Abrir el tutorial de TikTok/u);
 });
 
+test('Facebook is listed first and a subtle notice says one Facebook token also manages Instagram', () => {
+  assert.ok(markup.indexOf('Abrir el tutorial de Facebook') < markup.indexOf('Abrir el tutorial de Instagram'));
+  const notice = /<p class="hint tutorial-note"[^>]*>([^<]*)<\/p>/u.exec(markup)?.[1] ?? '';
+  assert.match(notice, /token de Facebook/u);
+  assert.match(notice, /Instagram/u);
+  assert.match(notice, /Página/u);
+  assert.ok(markup.indexOf('tutorial-note') > markup.indexOf('Abrir el tutorial de Instagram'), 'the notice sits below the cards');
+});
+
 test('the cards stay disabled until the saved progress has loaded', () => {
   const buttons = markup.match(/<button[^>]*tutorial-card[^>]*>/gu) ?? [];
   assert.equal(buttons.length, 2);

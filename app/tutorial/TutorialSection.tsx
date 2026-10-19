@@ -2,7 +2,7 @@
 
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ArrowLeft, ArrowRight, Check, ChevronDown, Copy, ExternalLink, ImageOff, RotateCcw, ShieldAlert } from 'lucide-react';
-import { COMING_SOON_PLATFORMS, PLACEHOLDER_NOTE, TUTORIALS, type TutorialPlatformId, type TutorialStep } from './content';
+import { COMING_SOON_PLATFORMS, PLACEHOLDER_NOTE, TUTORIALS, TUTORIAL_CARD_ORDER, TUTORIAL_TOKEN_NOTE, type TutorialPlatformId, type TutorialStep } from './content';
 import { EMPTY_PROGRESS, type TutorialProgress, goTo, resetPlatform, setAppId } from './progress';
 import { buildHelpPrompt } from './prompt';
 import { advance, CAPTURE_NOTE, copyText, execCommandCopy, externalLinkAttrs, isCapture, isSchematic, LOGIN_REDIRECT_NOTE, parseAppIdInput, progressSummary, resolveLink, SCHEMATIC_NOTE, screenshotView, startIndex, stepStatus } from './view';
@@ -116,7 +116,7 @@ export function TutorialSection({ api, confirm }: { api: Api; confirm: Confirm }
     <div className="section-h"><h3 id="tutorial-title">Tutorial</h3><p className="muted">Aprenda paso a paso a conseguir su token de Meta. Su avance se guarda en este equipo.</p></div>
     {saveFailed && <p className="hint tutorial-warning" role="status">No se pudo guardar o leer su avance; el tutorial sigue funcionando, pero podría no recordar dónde se quedó.</p>}
     {!platform || !step || !summary ? <div className="tutorial-cards">
-      {(['instagram', 'facebook'] as const).map((id) => {
+      {TUTORIAL_CARD_ORDER.map((id) => {
         const content = TUTORIALS[id];
         const resume = progressSummary(progress, id, content.steps, startIndex(progress, id, content.steps));
         const started = (progress.platforms[id]?.completed.length ?? 0) > 0 || (progress.platforms[id]?.currentStep ?? 0) > 0;
@@ -131,6 +131,7 @@ export function TutorialSection({ api, confirm }: { api: Api; confirm: Confirm }
         <span className="tutorial-card-text"><strong>{soon.label}</strong><span className="muted">Aún no disponible</span></span>
         <span className="tutorial-soon">Próximamente</span>
       </div>)}
+      <p className="hint tutorial-note">{TUTORIAL_TOKEN_NOTE}</p>
     </div> : <div className="tutorial-view">
       <div className="tutorial-toolbar">
         <button type="button" className="btn small" onClick={() => setPlatform(null)}><ArrowLeft size={14} aria-hidden="true" /> Volver a las plataformas</button>

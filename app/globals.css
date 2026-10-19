@@ -838,6 +838,7 @@ td .kw-chip + .kw-chip { margin-left: 4px; }
 .tutorial-block { display: grid; gap: 12px; min-width: 0; }
 .tutorial-block .section-h { margin-bottom: 0; }
 .tutorial-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 12px; }
+.tutorial-note { grid-column: 1 / -1; margin: 2px 0 0; font-size: 0.82rem; opacity: 0.8; }
 .tutorial-card { display: flex; align-items: center; gap: 12px; padding: 14px; text-align: left; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius-lg); color: var(--text); min-width: 0; transition: border-color 160ms ease, background-color 160ms ease; }
 @media (hover: hover) and (pointer: fine) { button.tutorial-card:hover:not(:disabled) { border-color: var(--line-strong); background: var(--surface-2); } }
 .tutorial-card.disabled { opacity: .6; cursor: not-allowed; }
