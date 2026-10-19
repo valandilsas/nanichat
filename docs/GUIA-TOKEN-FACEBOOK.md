@@ -34,6 +34,8 @@ En esta guía el token se representa como `TU_TOKEN`. **Nunca lo pegues en un ch
 
 ## Permisos
 
+También puedes consultar qué hace cada permiso (y cuáles usa NaniChat) en Conexiones, en la tarjeta plegable «Permisos de Facebook: qué hace cada uno». Es solo informativa.
+
 **Obligatorios** (la aplicación los usa hoy):
 
 | Permiso | Para qué sirve |

@@ -23,6 +23,7 @@ import { AiRowSlot, PageActions, SlotContext } from './components/slots';
 import { Nani } from './components/Nani';
 import { RefreshButton } from './components/RefreshButton';
 import { TutorialSection } from './tutorial/TutorialSection';
+import { PermissionsInfoSection } from './PermissionsInfoSection';
 import { LiveFlow } from './components/LiveFlow';
 import { ModerationDeck } from './components/ModerationDeck';
 import { type NaniState, accountErrorLabel, accountProblems, coverageLabel, enabledKeywords, flowEntries, heroCopy, naniState, watchedPosts } from './nani-labels';
@@ -533,6 +534,7 @@ function ConnectionsView({ connections, accounts, candidates, setCandidates, api
       </article>)}</div>}
     </section>
     <TutorialSection api={api} confirm={confirm} />
+    <PermissionsInfoSection />
     <div className="conn-columns">
       <div className="conn-forms">
         {editing && <form className="panel form-panel" onSubmit={(event) => void update(event)}><div className="panel-heading"><div><h3>Editar conexión</h3><p className="muted">Deje el token vacío para conservarlo. Si cambia, se invalida la validación anterior.</p></div></div><div className="form-grid"><Field label="Nombre"><input required value={editName} onChange={(event) => setEditName(event.target.value)} /></Field><Field label="App ID"><input value={editAppId} onChange={(event) => setEditAppId(event.target.value)} /></Field><Field label="Versión Graph"><input required pattern="v[0-9]+\.[0-9]+" value={editVersion} onChange={(event) => setEditVersion(event.target.value)} /></Field><Field label="Nuevo token · captura opcional"><input type="password" autoComplete="new-password" value={editToken} onChange={(event) => setEditToken(event.target.value)} /></Field></div><div className="row-actions"><button className="btn-main">Guardar cambios</button><button type="button" className="btn" onClick={() => { setEditToken(''); setEditing(null); }}>Cancelar</button></div></form>}
