@@ -115,7 +115,7 @@ const mb = (bytes) => `${(bytes / 1048576).toFixed(1)} MB`;
 
 function main() {
   const manifest = JSON.parse(readFileSync(join(repoRoot, 'package.json'), 'utf8'));
-  log(`Social Desk ${manifest.version} on ${process.platform}-${process.arch}, node ${process.version}`);
+  log(`NaniChat ${manifest.version} on ${process.platform}-${process.arch}, node ${process.version}`);
   if (process.platform !== 'win32') {
     warn('not running on Windows: native packages in node_modules will NOT match win32-x64 (trial build only)');
   }
@@ -174,7 +174,7 @@ function main() {
   const commit = process.env.GITHUB_SHA
     ?? spawnSync('git', ['rev-parse', 'HEAD'], { cwd: repoRoot, encoding: 'utf8' }).stdout?.trim() ?? 'unknown';
   writeFileSync(join(payloadDir, 'VERSION.txt'), [
-    `Social Desk ${manifest.version}`,
+    `NaniChat ${manifest.version}`,
     `commit: ${commit || 'unknown'}`,
     `node: ${nodeVersion}`,
     `built: ${new Date().toISOString()}`,

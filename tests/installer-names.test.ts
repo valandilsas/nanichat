@@ -19,5 +19,5 @@ test('the desktop workflow uploads the Electron Windows installer under its own 
   const workflow = read('.github/workflows/desktop-installers.yml');
   assert.ok(electron);
   assert.equal(workflow.includes(`dist/${electron}*.exe`), true);
-  assert.equal(workflow.includes('dist/SocialDesk-Setup-*.exe'), false);
+  assert.equal(workflow.includes('dist/NaniChat-Setup-*.exe'), false);
 });

@@ -1,6 +1,6 @@
 # Referencia técnica
 
-Documento de referencia para quien mantiene o audita Social Desk. Describe la arquitectura, el esquema de datos, la máquina de estados de la cola y las reglas de seguridad tal como están en el código. Para instalar, ver [INSTALACION-CON-IA.md](INSTALACION-CON-IA.md); para las convenciones de desarrollo, [AGENTS.md](../AGENTS.md).
+Documento de referencia para quien mantiene o audita NaniChat. Describe la arquitectura, el esquema de datos, la máquina de estados de la cola y las reglas de seguridad tal como están en el código. Para instalar, ver [INSTALACION-CON-IA.md](INSTALACION-CON-IA.md); para las convenciones de desarrollo, [AGENTS.md](../AGENTS.md).
 
 ## Contenido
 
@@ -49,6 +49,8 @@ Modos de ejecución:
 - Instalador de Windows (`packaging/windows/`, ver su [README](../packaging/windows/README.md)): Node.js portátil + `.next` compilado + `node_modules` de producción; el lanzador `launch.ps1` ejecuta `node\node.exe app\scripts\start.mjs` oculto con `LOCAL_SOCIAL_DATA_DIR=%LOCALAPPDATA%\SocialDesk\data` y `PORT` 3000 (o 3001-3020); `stop.ps1` lo termina con `taskkill /T /F`.
 - Ningún script de `package.json` usa sintaxis propia de una terminal (`VAR=valor`, `$(...)`, `&&`); lo comprueba `tests/start-script.test.ts`.
 
+> **Nombre del producto.** La aplicación se llama ahora **NaniChat** (antes «Social Desk»). Por compatibilidad conservan a propósito el nombre anterior la carpeta de datos (`%LOCALAPPDATA%\SocialDesk`), los `appId` (`com.socialdesk.app` y el `AppId` de Inno Setup), la carpeta de instalación `Programs\SocialDesk`, el paquete `local-social-automation` y las variables `SOCIAL_DESK_*`: así las instalaciones existentes mantienen sus datos y se actualizan en el mismo sitio.
+
 La API expone `GET /api/health` → `{"status":"ok","ready":true}` (otros métodos: 405) y `GET /api/session` → token CSRF del proceso.
 
 ## 2. Configuración y carpeta de datos
@@ -89,7 +91,7 @@ Las rutas relativas se resuelven desde el directorio de trabajo; en las rutas `S
 | Vivo y no hay hora de inicio comparable | Se rechaza (falla cerrado). | Se rechaza (falla cerrado): no se puede descartar la reutilización del PID. |
 | Cualquier otro error de `kill`, o archivo de bloqueo dañado | Se rechaza. | Se rechaza. |
 
-Consecuencia en macOS/Windows: tras un cierre forzado, si el PID anotado ya lo usa otro proceso, el humano debe confirmar que no hay otra instancia y borrar el archivo a mano. Con el instalador de Windows, el lanzador (`launch.ps1`) lo resuelve: si el PID anotado pertenece ahora a un programa que no es Social Desk (ni el `node.exe` de la instalación ni una línea de comandos con `start.mjs`/`server.ts`), borra ese bloqueo antes de arrancar; `stop.ps1` lo borra tras detener el proceso que lo tenía.
+Consecuencia en macOS/Windows: tras un cierre forzado, si el PID anotado ya lo usa otro proceso, el humano debe confirmar que no hay otra instancia y borrar el archivo a mano. Con el instalador de Windows, el lanzador (`launch.ps1`) lo resuelve: si el PID anotado pertenece ahora a un programa que no es NaniChat (ni el `node.exe` de la instalación ni una línea de comandos con `start.mjs`/`server.ts`), borra ese bloqueo antes de arrancar; `stop.ps1` lo borra tras detener el proceso que lo tenía.
 Estado global en la tabla `app_state`:
 
 - `dry_run`: `true` en una base nueva; se conserva entre reinicios.

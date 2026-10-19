@@ -1,6 +1,6 @@
 ﻿<#
 .SYNOPSIS
-  Stops Social Desk: the process tree recorded in run\pid.txt, plus any leftover node.exe of this installation.
+  Stops NaniChat: the process tree recorded in run\pid.txt, plus any leftover node.exe of this installation.
 
 .DESCRIPTION
   Windows PowerShell 5.1 compatible. Windows has no SIGINT/SIGTERM for a hidden console process, so the server is
@@ -43,15 +43,15 @@ function Write-LauncherLog([string]$Message) {
 
 function Show-Message([string]$Text, [string]$Kind = 'Information') {
   if (-not $Interactive) {
-    Write-Host "[Social Desk] $Text"
+    Write-Host "[NaniChat] $Text"
     return
   }
   try {
     Add-Type -AssemblyName System.Windows.Forms
     $icon = [System.Windows.Forms.MessageBoxIcon]::$Kind
-    [void][System.Windows.Forms.MessageBox]::Show($Text, 'Social Desk', [System.Windows.Forms.MessageBoxButtons]::OK, $icon)
+    [void][System.Windows.Forms.MessageBox]::Show($Text, 'NaniChat', [System.Windows.Forms.MessageBoxButtons]::OK, $icon)
   } catch {
-    Write-Host "[Social Desk] $Text"
+    Write-Host "[NaniChat] $Text"
   }
 }
 
@@ -91,7 +91,7 @@ try {
   foreach ($targetPid in @($targets.Keys)) {
     if ($ours -notcontains $targetPid) {
       if (Test-ProcessAlive $targetPid) {
-        Write-LauncherLog "el PID $targetPid ya no es Social Desk (PID reutilizado); no se toca"
+        Write-LauncherLog "el PID $targetPid ya no es NaniChat (PID reutilizado); no se toca"
       }
       continue
     }
@@ -110,7 +110,7 @@ try {
   $stillAlive = @($stopped | Where-Object { Test-ProcessAlive $_ })
   if ($stillAlive.Count -gt 0) {
     Write-LauncherLog "ERROR: no se pudo detener: $($stillAlive -join ', ')"
-    Show-Message "No se pudo detener Social Desk (proceso $($stillAlive -join ', ')). Reinicia Windows." 'Error'
+    Show-Message "No se pudo detener NaniChat (proceso $($stillAlive -join ', ')). Reinicia Windows." 'Error'
     exit 1
   }
 
@@ -130,15 +130,15 @@ try {
   }
 
   if ($stopped.Count -gt 0) {
-    Write-LauncherLog 'Social Desk se detuvo'
-    Show-Message 'Social Desk se detuvo.'
+    Write-LauncherLog 'NaniChat se detuvo'
+    Show-Message 'NaniChat se detuvo.'
   } else {
-    Write-LauncherLog 'Social Desk no estaba abierto'
-    Show-Message 'Social Desk no estaba abierto.'
+    Write-LauncherLog 'NaniChat no estaba abierto'
+    Show-Message 'NaniChat no estaba abierto.'
   }
   exit 0
 } catch {
   Write-LauncherLog "ERROR: $($_.Exception.Message)"
-  Show-Message "No se pudo detener Social Desk: $($_.Exception.Message)" 'Error'
+  Show-Message "No se pudo detener NaniChat: $($_.Exception.Message)" 'Error'
   exit 1
 }

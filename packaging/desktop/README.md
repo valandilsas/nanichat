@@ -1,6 +1,6 @@
-# Aplicación de escritorio de Social Desk (Electron)
+# Aplicación de escritorio de NaniChat (Electron)
 
-Esta carpeta y `desktop/` empaquetan Social Desk como una aplicación de escritorio autónoma con Electron (`44.8.0`, Node.js `24.22.0` integrado) para **Linux** (`AppImage` y `.deb`) y **Windows** (instalador NSIS por usuario `SocialDesk-Desktop-Setup-<versión>.exe`), compilados en GitHub Actions ([`.github/workflows/desktop-installers.yml`](../../.github/workflows/desktop-installers.yml)).
+Esta carpeta y `desktop/` empaquetan NaniChat como una aplicación de escritorio autónoma con Electron (`44.8.0`, Node.js `24.22.0` integrado) para **Linux** (`AppImage` y `.deb`) y **Windows** (instalador NSIS por usuario `NaniChat-Desktop-Setup-<versión>.exe`), compilados en GitHub Actions ([`.github/workflows/desktop-installers.yml`](../../.github/workflows/desktop-installers.yml)).
 
 > El instalador clásico de Inno Setup en [`packaging/windows/`](../windows/README.md) se mantiene sin cambios. Ambos comparten la misma carpeta de datos en Windows (`%LOCALAPPDATA%\SocialDesk`), por lo que cambiar de uno a otro conserva la base de datos y `vault.key`.
 
@@ -12,8 +12,8 @@ Esta carpeta y `desktop/` empaquetan Social Desk como una aplicación de escrito
 | `npm run build` | Compila la aplicación web Next.js en `.next/`. |
 | `npm run desktop:icons` | Genera `build/icon.ico` (múltiples tamaños) y `build/icon.png` (512×512) a partir de `packaging/windows/lib/icon.mjs`. |
 | `npm run desktop:dev` | Genera los iconos, compila `.next/` si no existe y abre la ventana de Electron en modo desarrollo. |
-| `npm run desktop:dist:linux` | Genera `dist/SocialDesk-<versión>-x86_64.AppImage` y `dist/social-desk_<versión>_amd64.deb`. |
-| `npm run desktop:dist:win` | Genera `dist/SocialDesk-Desktop-Setup-<versión>.exe` (NSIS por usuario, sin permisos de administrador). |
+| `npm run desktop:dist:linux` | Genera `dist/NaniChat-<versión>-x86_64.AppImage` y `dist/nanichat_<versión>_amd64.deb`. |
+| `npm run desktop:dist:win` | Genera `dist/NaniChat-Desktop-Setup-<versión>.exe` (NSIS por usuario, sin permisos de administrador). |
 
 ## Qué instala y cómo funciona
 
@@ -50,7 +50,7 @@ Desinstalar la aplicación **nunca** borra `<home>/data` ni `<home>/logs`.
 
 - **Cerrar la ventana no detiene el servidor:** al pulsar el botón de cerrar (`×`), la ventana se oculta en la bandeja del sistema para que el monitoreo siga funcionando en segundo plano. La primera vez se muestra una notificación explicándolo.
 - **Menú de la bandeja del sistema:**
-  - **Abrir Social Desk:** muestra y enfoca la ventana principal (también al hacer clic en el icono o al abrir una segunda instancia).
+  - **Abrir NaniChat:** muestra y enfoca la ventana principal (también al hacer clic en el icono o al abrir una segunda instancia).
   - **Abrir en el navegador:** abre `http://127.0.0.1:<puerto>` en el navegador predeterminado.
   - **Iniciar con el sistema** (activado por defecto):
     - En Windows y macOS usa `app.setLoginItemSettings({ openAtLogin, args: ['--hidden'] })`.
@@ -73,7 +73,7 @@ Desinstalar la aplicación **nunca** borra `<home>/data` ni `<home>/logs`.
 | --- | --- |
 | `desktop/main.cjs` | Proceso principal de Electron: bloqueo de instancia única, ventana, bandeja, ciclo de vida del servidor. |
 | `desktop/server-entry.mjs` | Entrada del proceso hijo del servidor: puente IPC → `SIGTERM` y carga de `scripts/start.mjs`. |
-| `desktop/splash.html` | Pantalla de carga local en español («Iniciando Social Desk...») sin recursos remotos. |
+| `desktop/splash.html` | Pantalla de carga local en español («Iniciando NaniChat...») sin recursos remotos. |
 | `desktop/lib/*.cjs` | Lógica pura probada sin Electron en `tests/desktop-shell.test.ts` (rutas, puertos, autostart, ajustes, navegación, cliente HTTP). |
 | `packaging/desktop/run.mjs` | Punto de entrada multiplataforma para `desktop:icons`, `desktop:dev`, `desktop:dist:linux` y `desktop:dist:win`. |
 | `packaging/desktop/icons.mjs` | Generador de `build/icon.ico` y `build/icon.png` (512×512). |

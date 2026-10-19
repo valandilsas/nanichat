@@ -1,8 +1,8 @@
-# Social Desk desktop app (Electron). Build: npm run build, then npm run desktop:dist:linux / desktop:dist:win.
+# NaniChat desktop app (Electron). Build: npm run build, then npm run desktop:dist:linux / desktop:dist:win.
 # Details: packaging/desktop/README.md. The Inno Setup installer in packaging/windows is a separate, unchanged build.
 appId: com.socialdesk.app
-productName: Social Desk
-copyright: Copyright © Social Desk contributors
+productName: NaniChat
+copyright: Copyright © NaniChat contributors
 # Next.js and tsx need a real file system: no asar archive.
 asar: false
 # Every native addon in node_modules is N-API (node-llama-cpp; sharp is pruned), so nothing is rebuilt for Electron.
@@ -48,11 +48,11 @@ nsis:
   allowToChangeInstallationDirectory: true
   createDesktopShortcut: always
   createStartMenuShortcut: true
-  shortcutName: Social Desk
+  shortcutName: NaniChat
   installerLanguages: [es_ES]
   # User data lives in %LOCALAPPDATA%\SocialDesk (shared with the Inno Setup installer) and is never deleted.
   deleteAppDataOnUninstall: false
-  artifactName: SocialDesk-Desktop-Setup-${version}.exe
+  artifactName: NaniChat-Desktop-Setup-${version}.exe
 
 linux:
   target:
@@ -64,9 +64,9 @@ linux:
   syncDesktopName: true
   category: Office
   executableName: social-desk
-  maintainer: Social Desk
+  maintainer: NaniChat
   synopsis: Automatización local de respuestas para Instagram
 appImage:
-  artifactName: SocialDesk-${version}-${arch}.AppImage
+  artifactName: NaniChat-${version}-${arch}.AppImage
 deb:
-  artifactName: social-desk_${version}_${arch}.deb
+  artifactName: nanichat_${version}_${arch}.deb

@@ -1,6 +1,6 @@
-# Instalador de Social Desk para Windows
+# Instalador de NaniChat para Windows
 
-Esta carpeta produce `SocialDesk-Setup-<versión>.exe`: un instalador para personas sin conocimientos técnicos. Incluye su propio Node.js, la aplicación ya compilada y accesos directos; no hace falta instalar Node, git ni npm. Lo compila y lo prueba GitHub Actions en un Windows real ([`.github/workflows/windows-installer.yml`](../../.github/workflows/windows-installer.yml)).
+Esta carpeta produce `NaniChat-Setup-<versión>.exe`: un instalador para personas sin conocimientos técnicos. Incluye su propio Node.js, la aplicación ya compilada y accesos directos; no hace falta instalar Node, git ni npm. Lo compila y lo prueba GitHub Actions en un Windows real ([`.github/workflows/windows-installer.yml`](../../.github/workflows/windows-installer.yml)).
 
 ## Publicar una versión
 
@@ -27,7 +27,7 @@ La etiqueta **debe** coincidir con la versión de `package.json`; si no, el fluj
   run\                                     pid.txt y port.txt de la instancia abierta
 ```
 
-Accesos directos: **Social Desk** (escritorio, activado por defecto, y menú Inicio), **Detener Social Desk** y **Manual de usuario** (menú Inicio → Social Desk). La instalación es por usuario: no pide permisos de administrador ni escribe en el registro más allá de la entrada de desinstalación.
+Accesos directos: **NaniChat** (escritorio, activado por defecto, y menú Inicio), **Detener NaniChat** y **Manual de usuario** (menú Inicio → NaniChat). La instalación es por usuario: no pide permisos de administrador ni escribe en el registro más allá de la entrada de desinstalación.
 
 ## Cómo se construye
 
@@ -36,7 +36,7 @@ Accesos directos: **Social Desk** (escritorio, activado por defecto, y menú Ini
 | 1 | `npm ci`, `npm run build` | Dependencias y compilación de Next.js (`.next`). |
 | 2 | `node packaging/windows/fetch-node.mjs` | Descarga `node-v<versión>-win-x64.zip` y `SHASUMS256.txt` de nodejs.org, **verifica el SHA-256** y extrae solo `node.exe` y `LICENSE` en `dist/node-win-x64/`. `PORTABLE_NODE_VERSION` permite otra versión (nunca menor que `engines`). |
 | 3 | `node packaging/windows/build-payload.mjs` | Arma `dist/payload/`: copia los archivos de ejecución, instala `npm ci --omit=dev`, poda lo innecesario e informa tamaño y ruta más larga (`dist/payload-report.json`). |
-| 4 | `ISCC.exe /DAppVersion=<v> /DPayloadDir=<…> /DOutputDir=<…> packaging\windows\SocialDesk.iss` | Inno Setup 6 empaqueta `dist/payload` en `dist/installer/SocialDesk-Setup-<v>.exe` (LZMA2). |
+| 4 | `ISCC.exe /DAppVersion=<v> /DPayloadDir=<…> /DOutputDir=<…> packaging\windows\SocialDesk.iss` | Inno Setup 6 empaqueta `dist/payload` en `dist/installer/NaniChat-Setup-<v>.exe` (LZMA2). |
 | 5 | `packaging\windows\test\smoke.ps1 -Installer <exe>` | Prueba de humo (ver abajo). |
 
 Decisiones de tamaño (≈ 215 MB sin comprimir en una prueba en Linux antes del modelo local; con `node-llama-cpp` se estiman **≈ 270 MB**: +46 MB del binario `@node-llama-cpp/win-x64` y +7 MB del paquete y sus dependencias tras la poda; el objetivo es < 300 MB):
@@ -54,7 +54,7 @@ Decisiones de tamaño (≈ 215 MB sin comprimir en una prueba en Linux antes del
 
 1. Si la instancia anotada en `run\port.txt` responde en `/api/health`, solo abre el navegador.
 2. Si el proceso de `run\pid.txt` es este `node.exe` y sigue arrancando, lo espera en vez de abrir otro.
-3. Si el bloqueo de `data\` nombra un PID que ahora es **otro programa** (Windows reutiliza PIDs y la app, sin `/proc`, no puede saberlo), borra ese bloqueo obsoleto. Un bloqueo de un Social Desk vivo nunca se toca.
+3. Si el bloqueo de `data\` nombra un PID que ahora es **otro programa** (Windows reutiliza PIDs y la app, sin `/proc`, no puede saberlo), borra ese bloqueo obsoleto. Un bloqueo de un NaniChat vivo nunca se toca.
 4. Usa el puerto **3000**; si está ocupado, el primero libre entre **3001 y 3020**.
 5. Inicia `node\node.exe app\scripts\start.mjs` oculto, con `LOCAL_SOCIAL_DATA_DIR` y `PORT`, y espera hasta 90 s a `/api/health`. Luego abre `http://localhost:<puerto>`.
 6. Si falla, muestra un cuadro de diálogo con la ruta del registro y sus últimas 15 líneas.
@@ -67,7 +67,7 @@ Opciones para pruebas: `-NoBrowser`, `-Quiet` (sin diálogos; también `SOCIAL_D
 
 ## Desinstalar y datos
 
-- Panel de control → Aplicaciones → **Social Desk** → Desinstalar (o `unins000.exe`).
+- Panel de control → Aplicaciones → **NaniChat** → Desinstalar (o `unins000.exe`).
 - Primero se ejecuta `stop.ps1 -Quiet`, luego se borran **solo** las carpetas del programa (`app`, `node`, `launcher`, `docs`).
 - `%LOCALAPPDATA%\SocialDesk\data` (base de datos y `vault.key`) **siempre se conserva**, también en desinstalaciones silenciosas. Al desinstalar con ventana se muestra dónde quedaron. Para borrarlos hay que hacerlo a mano.
 - Actualizar = instalar la versión nueva encima (mismo `AppId`): el instalador detiene la versión abierta, reemplaza las carpetas del programa y conserva los datos. **Respalda `data` antes**: la base se migra al arrancar y no se puede volver atrás.
@@ -82,7 +82,7 @@ La ejecuta CI después de compilar; también se puede correr en un Windows propi
 
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File packaging\windows\test\smoke.ps1 `
-  -Installer dist\installer\SocialDesk-Setup-0.1.0.exe -SocialDeskHome "$env:TEMP\sd-smoke-home"
+  -Installer dist\installer\NaniChat-Setup-0.1.0.exe -SocialDeskHome "$env:TEMP\sd-smoke-home"
 ```
 
 Sin `-SocialDeskHome` usa `%LOCALAPPDATA%\SocialDesk` y **se niega a correr** si ya existe `data` (para no tocar una instalación real). Comprueba:

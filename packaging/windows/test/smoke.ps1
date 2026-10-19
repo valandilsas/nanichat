@@ -1,6 +1,6 @@
 ﻿<#
 .SYNOPSIS
-  End-to-end smoke test of the Social Desk Windows installer (run by CI after compiling it; also usable by hand).
+  End-to-end smoke test of the NaniChat Windows installer (run by CI after compiling it; also usable by hand).
 
 .DESCRIPTION
   Windows PowerShell 5.1 compatible (CI runs it with `shell: powershell`, the same engine the shortcuts use).
@@ -13,7 +13,7 @@
   when %LOCALAPPDATA%\SocialDesk\data already exists, unless -SocialDeskHome points to a throwaway folder.
 
 .EXAMPLE
-  powershell -NoProfile -ExecutionPolicy Bypass -File packaging\windows\test\smoke.ps1 -Installer dist\installer\SocialDesk-Setup-0.1.0.exe
+  powershell -NoProfile -ExecutionPolicy Bypass -File packaging\windows\test\smoke.ps1 -Installer dist\installer\NaniChat-Setup-0.1.0.exe
 #>
 [CmdletBinding()]
 param(
@@ -44,7 +44,7 @@ $LockFile = Join-Path $DataDir '.application-owner.json'
 $NodeExe = Join-Path $InstallDir 'node\node.exe'
 $Launch = Join-Path $InstallDir 'launcher\launch.ps1'
 $Stop = Join-Path $InstallDir 'launcher\stop.ps1'
-$StartMenuDir = Join-Path $env:APPDATA 'Microsoft\Windows\Start Menu\Programs\Social Desk'
+$StartMenuDir = Join-Path $env:APPDATA 'Microsoft\Windows\Start Menu\Programs\NaniChat'
 
 $script:Failures = 0
 $script:Passes = 0
@@ -187,7 +187,7 @@ try {
       'launcher\launch.ps1', 'launcher\stop.ps1', 'launcher\social-desk.ico', 'docs\Manual-Social-Desk.pdf', 'VERSION.txt', 'unins000.exe')) {
     Assert-That (Test-Path -LiteralPath (Join-Path $InstallDir $relative)) "installed: $relative" | Out-Null
   }
-  foreach ($shortcut in @('Social Desk.lnk', 'Detener Social Desk.lnk', 'Manual de usuario.lnk')) {
+  foreach ($shortcut in @('NaniChat.lnk', 'Detener NaniChat.lnk', 'Manual de usuario.lnk')) {
     Assert-That (Test-Path -LiteralPath (Join-Path $StartMenuDir $shortcut)) "Start menu shortcut: $shortcut" | Out-Null
   }
   Assert-That (-not (Test-Path -LiteralPath (Join-Path $InstallDir 'app\node_modules\typescript'))) 'no dev dependencies installed' | Out-Null
@@ -213,7 +213,7 @@ try {
   Assert-That ((Read-Text (Join-Path $RunDir 'port.txt')) -eq "$port") 'second launch keeps the same port' | Out-Null
   Assert-That ((Read-Text (Join-Path $RunDir 'pid.txt')) -eq $pid1) 'second launch keeps the same process' | Out-Null
   $nodes = @(Get-OurNodeIds)
-  Assert-That ($nodes.Count -eq 1) 'exactly one Social Desk node process' "(found $($nodes.Count): $($nodes -join ', '))" | Out-Null
+  Assert-That ($nodes.Count -eq 1) 'exactly one NaniChat node process' "(found $($nodes.Count): $($nodes -join ', '))" | Out-Null
 
   # 4. Data lives in the per-user folder.
   foreach ($file in @('social-automation.sqlite', 'vault.key', '.application-owner.json')) {
@@ -227,7 +227,7 @@ try {
   Assert-That (Wait-Until { -not (Test-PortOpen $port) } 15) "port $port is closed after stop" | Out-Null
   Assert-That (-not (Test-Path -LiteralPath $LockFile)) 'instance lock released after stop' | Out-Null
   Assert-That (-not (Test-Path -LiteralPath (Join-Path $RunDir 'pid.txt'))) 'run\pid.txt removed after stop' | Out-Null
-  Assert-That (@(Get-OurNodeIds).Count -eq 0) 'no Social Desk node process after stop' | Out-Null
+  Assert-That (@(Get-OurNodeIds).Count -eq 0) 'no NaniChat node process after stop' | Out-Null
 
   # 6. Clean restart, then an abrupt kill (like closing from Task Manager) and a restart over the stale lock.
   $code = Invoke-Script $Launch @('-NoBrowser', '-Quiet', '-TimeoutSeconds', "$TimeoutSeconds")

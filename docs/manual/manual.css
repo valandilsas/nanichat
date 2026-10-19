@@ -1,4 +1,4 @@
-/* Social Desk — Manual de usuario
+/* NaniChat — Manual de usuario
  * Hoja de estilos pensada primero para impresión (A4) con Chrome headless.
  * En pantalla se muestra como una columna de papel centrada.
  */
@@ -31,7 +31,7 @@
   margin: 18mm 18mm 20mm 18mm;
 
   @bottom-left {
-    content: "Social Desk — Manual de usuario";
+    content: "NaniChat — Manual de usuario";
     font-family: var(--font-body);
     font-size: 8pt;
     color: #7a8294;

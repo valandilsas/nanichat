@@ -2,7 +2,7 @@
 
 Este archivo orienta a asistentes de programación (Claude Code, Codex, Cursor, etc.) y a personas que modifican el código. Si solo quieres **instalar** la aplicación, lee [docs/INSTALACION-CON-IA.md](docs/INSTALACION-CON-IA.md).
 
-El código, los comentarios y las pruebas están en inglés. La interfaz y la documentación están en español.
+El producto se llama **NaniChat** (antes «Social Desk»); los identificadores internos con el nombre anterior se conservan a propósito (ver docs/REFERENCIA-TECNICA.md). El código, los comentarios y las pruebas están en inglés. La interfaz y la documentación están en español.
 
 ## Comandos
 
@@ -96,6 +96,7 @@ Así funciona el código hoy. Si la tarea pide cambiarlo, cámbialo.
 ## Tutorial integrado
 
 - El contenido del tutorial son **datos en español** en `app/tutorial/content.ts`.
+- Los prompts de ayuda nunca nombran el producto: ni «NaniChat» ni el nombre anterior «Social Desk» (`buildHelpPrompt` los reemplaza por «mi programa local»; lo comprueba `tests/tutorial-prompt.test.ts`).
 - Los enlaces https salen de `ALLOWED_LINK_HOSTS`, `VERIFIED_STATIC_URLS` (raíces estables y páginas canónicas `/documentation/…`) o `DEEP_LINK_PATTERNS` (enlaces con `{APP_ID}` observados en vivo; se activan con el campo opcional «Tu ID de app», 8-20 dígitos). Lo no confirmado (roles, secreto de la app) va en texto «por verificar» con `verified: false`.
 - Los prompts de ayuda los genera `buildHelpPrompt` (`app/tutorial/prompt.ts`) a partir de los datos del paso, con marcadores `[REEMPLAZA: …]`. Los pasos que ocurren dentro del programa dicen «mi programa local» y describen sus etiquetas; `tests/tutorial-prompt.test.ts` lo comprueba. Marcadores de ejemplo: `TU_TOKEN`, `ID_DE_TU_APP`, `@tu_cuenta`.
 - Imágenes: los pasos de dentro del programa usan capturas (`public/tutorial/<plataforma>/<paso>.png`) generadas con `node docs/manual/tools/capture-tutorial.mjs` sobre el servidor demo (datos ficticios, proveedor falso, sin red, puerto aleatorio distinto de 3000 y 3100, datos bajo `/tmp`) y con llamadas numeradas; la interfaz las rotula «Captura de ejemplo con datos ficticios de tu programa». Los pasos del panel de Meta y los informativos usan esquemas SVG en `public/tutorial/<plataforma>/<paso>.svg` («Esquema ilustrativo»; «Esquema por verificar» si la pantalla no se observó).

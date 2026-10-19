@@ -1,4 +1,4 @@
-# Builds the Social Desk Windows installer on a real Windows runner, smoke-tests it (silent install, start, stop,
+# Builds the NaniChat Windows installer on a real Windows runner, smoke-tests it (silent install, start, stop,
 # restart, uninstall) and, for v* tags, publishes it as a GitHub Release. Details: packaging/windows/README.md.
 name: Windows installer
 
@@ -50,7 +50,7 @@ jobs:
           }
           "node=$node" >> $env:GITHUB_OUTPUT
           "app=$app" >> $env:GITHUB_OUTPUT
-          Write-Host "Node.js $node, Social Desk $app"
+          Write-Host "Node.js $node, NaniChat $app"
 
       - name: Set up Node.js ${{ steps.versions.outputs.node }}
         uses: actions/setup-node@v4
@@ -153,7 +153,7 @@ jobs:
         timeout-minutes: 20
         shell: powershell
         run: |
-          $installer = "dist\installer\SocialDesk-Setup-${{ steps.versions.outputs.app }}.exe"
+          $installer = "dist\installer\NaniChat-Setup-${{ steps.versions.outputs.app }}.exe"
           & .\packaging\windows\test\smoke.ps1 -Installer $installer `
             -InstallDir (Join-Path $env:RUNNER_TEMP 'SocialDeskSmoke\app') `
             -ArtifactsDir (Join-Path $PWD 'test-output\smoke')
@@ -161,7 +161,7 @@ jobs:
 
       - name: Compute SHA-256
         run: |
-          $installer = Get-Item "dist\installer\SocialDesk-Setup-${{ steps.versions.outputs.app }}.exe"
+          $installer = Get-Item "dist\installer\NaniChat-Setup-${{ steps.versions.outputs.app }}.exe"
           $hash = (Get-FileHash -Algorithm SHA256 $installer.FullName).Hash.ToLowerInvariant()
           # Same format as `sha256sum`, LF line ending, so `sha256sum -c SHA256SUMS.txt` works.
           [System.IO.File]::WriteAllText((Join-Path $installer.DirectoryName 'SHA256SUMS.txt'), "$hash  $($installer.Name)`n")
@@ -235,23 +235,23 @@ jobs:
           VERSION: ${{ needs.build.outputs.version }}
         run: |
           set -euo pipefail
-          installer="SocialDesk-Setup-${VERSION}.exe"
+          installer="NaniChat-Setup-${VERSION}.exe"
           test -f "dist/${installer}"
           sha="$(cut -d' ' -f1 dist/SHA256SUMS.txt)"
           manual="https://github.com/${GH_REPO}/blob/${TAG}/docs/manual/Manual-Social-Desk.pdf"
           cat > notes.md <<EOF
-          ## Social Desk ${VERSION} para Windows
+          ## NaniChat ${VERSION} para Windows
 
           ### Instalar
           1. Descarga **${installer}** (abajo, en «Assets»).
           2. Haz doble clic en el archivo. No necesitas permisos de administrador.
           3. Windows puede mostrar «Windows protegió su PC» (SmartScreen) porque el instalador **no está firmado** digitalmente. Pulsa **Más información → Ejecutar de todas formas**.
-          4. Al terminar, abre **Social Desk** desde el icono del escritorio o el menú Inicio. Se abre en tu navegador, en \`http://localhost:3000\` (u otro puerto libre).
+          4. Al terminar, abre **NaniChat** desde el icono del escritorio o el menú Inicio. Se abre en tu navegador, en \`http://localhost:3000\` (u otro puerto libre).
 
           ### Antes de empezar
           - Necesitas **tus propias credenciales de Meta** (una app de Meta y un token de acceso de Instagram). El instalador no incluye ninguna.
           - La aplicación arranca en **Dry Run** (no envía nada) y con el **Monitoreo apagado**.
-          - Manual de usuario: [Manual-Social-Desk.pdf](${manual}) (también en el menú Inicio → Social Desk → Manual de usuario).
+          - Manual de usuario: [Manual-Social-Desk.pdf](${manual}) (también en el menú Inicio → NaniChat → Manual de usuario).
 
           ### Tus datos
           - Se guardan en \`%LOCALAPPDATA%\\SocialDesk\\data\` (base de datos y \`vault.key\`). Desinstalar **no** los borra.
@@ -261,8 +261,8 @@ jobs:
           SHA-256 de \`${installer}\`: \`${sha}\` (también en \`SHA256SUMS.txt\`).
           EOF
           if gh release view "$TAG" >/dev/null 2>&1; then
-            gh release edit "$TAG" --title "Social Desk ${VERSION}" --notes-file notes.md
+            gh release edit "$TAG" --title "NaniChat ${VERSION}" --notes-file notes.md
           else
-            gh release create "$TAG" --title "Social Desk ${VERSION}" --notes-file notes.md --verify-tag
+            gh release create "$TAG" --title "NaniChat ${VERSION}" --notes-file notes.md --verify-tag
           fi
           gh release upload "$TAG" "dist/${installer}" dist/SHA256SUMS.txt --clobber

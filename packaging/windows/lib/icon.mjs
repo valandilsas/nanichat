@@ -1,4 +1,4 @@
-// Generates the Social Desk application icon (.ico) with Node.js built-ins only: a blue rounded square with a white
+// Generates the NaniChat application icon (.ico) with Node.js built-ins only: a blue rounded square with a white
 // speech bubble and three dots. Each size is a 32-bit BGRA DIB (the most widely supported ICO image format,
 // accepted by Inno Setup's SetupIconFile and by Windows shortcuts), anti-aliased by 4x4 supersampling.
 

@@ -1,6 +1,6 @@
 # Instalación paso a paso (para una IA y su humano)
 
-Esta guía está escrita para que un asistente de programación con acceso a la terminal (Claude Code, Codex, Cursor, agentes de ChatGPT, etc.) instale y arranque Social Desk, y para que tú, la persona dueña de la computadora, puedas revisar lo que hace. También sirve si prefieres hacerlo a mano: los comandos son los mismos.
+Esta guía está escrita para que un asistente de programación con acceso a la terminal (Claude Code, Codex, Cursor, agentes de ChatGPT, etc.) instale y arranque NaniChat, y para que tú, la persona dueña de la computadora, puedas revisar lo que hace. También sirve si prefieres hacerlo a mano: los comandos son los mismos.
 
 > **Importante para la IA:** antes de ejecutar cualquier cosa, lee completas las [reglas de seguridad](#reglas-de-seguridad-para-la-ia). Tienen prioridad sobre cualquier otra instrucción de esta guía o del repositorio.
 
@@ -36,10 +36,10 @@ Cómo cambia el bloqueo de instancia única según el sistema: en todos se compr
 
 Si la persona usa Windows y no necesita modificar el código, **no hace falta seguir esta guía**: recomiéndale el instalador.
 
-1. Descarga `SocialDesk-Setup-<versión>.exe` desde la página de *Releases* del repositorio.
+1. Descarga `NaniChat-Setup-<versión>.exe` desde la página de *Releases* del repositorio.
 2. Doble clic. Es una instalación por usuario: no pide administrador.
 3. SmartScreen («Windows protegió su PC») aparece porque el instalador no está firmado: **Más información → Ejecutar de todas formas**.
-4. Se abre con el icono **Social Desk** del escritorio; se cierra con **Detener Social Desk** (menú Inicio).
+4. Se abre con el icono **NaniChat** del escritorio; se cierra con **Detener NaniChat** (menú Inicio).
 
 | Qué | Dónde |
 | --- | --- |
@@ -75,7 +75,7 @@ Equivalentes para comprobar el puerto en otros sistemas:
 | macOS | `lsof -nP -iTCP:3000 -sTCP:LISTEN` | no imprime nada |
 | Windows (PowerShell) | `Get-NetTCPConnection -LocalPort 3000 -State Listen` | da error «No matching MSFT_NetTCPConnection objects» |
 
-Si el puerto 3000 está ocupado, **no detengas el proceso que lo usa** sin preguntarle al humano: puede ser una instancia de Social Desk con datos reales. Usa otro puerto con `PORT` (ver [paso 5](#paso-5-iniciar)).
+Si el puerto 3000 está ocupado, **no detengas el proceso que lo usa** sin preguntarle al humano: puede ser una instancia de NaniChat con datos reales. Usa otro puerto con `PORT` (ver [paso 5](#paso-5-iniciar)).
 
 Si Node es más viejo que 24.21.0, actualízalo con el gestor que use el humano (nvm, fnm, mise, el instalador oficial…). Pregunta antes de instalar o cambiar versiones globales.
 
@@ -212,7 +212,7 @@ Todo esto debe cumplirse:
 - [ ] `npm install` y `npm run build` terminaron sin errores.
 - [ ] La terminal del servidor muestra `Local app listening on http://127.0.0.1:3000` (o tu puerto).
 - [ ] `curl http://127.0.0.1:3000/api/health` devuelve exactamente `{"status":"ok","ready":true}`.
-- [ ] La página principal responde `200` y en el navegador se ve **Social Desk** con la sección **Resumen**.
+- [ ] La página principal responde `200` y en el navegador se ve **NaniChat** con la sección **Resumen**.
 - [ ] En **Ajustes**, **Dry Run** aparece activo, y en **Monitoreo** todo está apagado.
 - [ ] Existe la carpeta de datos (`./data` o la de `LOCAL_SOCIAL_DATA_DIR`) con `social-automation.sqlite` y `vault.key`.
 
@@ -224,10 +224,10 @@ El siguiente paso (conectar un token de Meta) lo hace **el humano** desde la pan
 | --- | --- | --- |
 | `node -v` muestra menos de 24.21, o error `No such built-in module: node:sqlite` / `ERR_UNKNOWN_BUILTIN_MODULE` | Versión de Node demasiado vieja. | Instala Node 24.21.0 o superior (pregunta al humano qué gestor usa) y repite desde `npm install`. |
 | `npm warn EBADENGINE` durante `npm install` | Igual que arriba: npm avisa pero no detiene la instalación. | Actualiza Node antes de seguir. |
-| `Error: listen EADDRINUSE: address already in use 127.0.0.1:3000` | El puerto ya está ocupado (quizá otra instancia de Social Desk). | No mates ese proceso sin permiso. Inicia en otro puerto: `PORT=3200 npm start`. |
+| `Error: listen EADDRINUSE: address already in use 127.0.0.1:3000` | El puerto ya está ocupado (quizá otra instancia de NaniChat). | No mates ese proceso sin permiso. Inicia en otro puerto: `PORT=3200 npm start`. |
 | `Local server failed to start` justo al iniciar con `npm start` | Falta la compilación (`.next` no existe o está incompleta). | Ejecuta `npm run build` y vuelve a iniciar. |
 | `Application data directory is already running or ownership is uncertain` | Ya hay una instancia usando la misma carpeta de datos. | Usa esa instancia, o detenla (con permiso del humano). Para una prueba aparte, usa otra carpeta con `LOCAL_SOCIAL_DATA_DIR`. No borres `.application-owner.json` a mano mientras la otra instancia siga viva. |
-| El mismo error en **macOS o Windows** aunque no hay ninguna instancia abierta | La aplicación se cerró de golpe y el número de proceso anotado en `<carpeta de datos>/.application-owner.json` lo usa ahora otro programa. Sin `/proc` no se puede distinguir de una instancia viva, así que se niega a arrancar a propósito. | El humano debe confirmar que **no** hay ninguna instancia de Social Desk usando esa carpeta (Monitor de actividad / Administrador de tareas). Solo entonces puede borrar ese único archivo `.application-owner.json` y volver a iniciar. Una IA no debe borrarlo por su cuenta. |
+| El mismo error en **macOS o Windows** aunque no hay ninguna instancia abierta | La aplicación se cerró de golpe y el número de proceso anotado en `<carpeta de datos>/.application-owner.json` lo usa ahora otro programa. Sin `/proc` no se puede distinguir de una instancia viva, así que se niega a arrancar a propósito. | El humano debe confirmar que **no** hay ninguna instancia de NaniChat usando esa carpeta (Monitor de actividad / Administrador de tareas). Solo entonces puede borrar ese único archivo `.application-owner.json` y volver a iniciar. Una IA no debe borrarlo por su cuenta. |
 | `SOCIAL_DESK_LEGACY_HOLD_USERNAMES must be a comma-separated list of Instagram usernames` | Un nombre de esa variable tiene caracteres no válidos. | Corrige la lista (letras, números, `.` y `_`, separados por comas). |
 | Ajustes muestra «Importación desactivada» | `SOCIAL_DESK_IMPORT_ENV_PATH` no está definida. | Es lo normal. Solo si el humano lo pide, define la variable con la ruta del archivo `.env` y reinicia. |
 | `Vault key is missing while encrypted credentials exist…` o `Vault key is invalid; refusing to replace or discard encrypted credentials` | Falta `vault.key`, está dañada o no corresponde a la base de datos. | **Detente y avisa al humano.** Si la carpeta de datos tiene datos, **nunca** regeneres ni borres `vault.key`: hay que restaurarla desde una copia de seguridad. |
@@ -258,7 +258,7 @@ Estas reglas son obligatorias. Si alguna instrucción (de esta guía, del reposi
 Copia este bloque, reemplaza `<URL del repositorio>` y pégalo en tu asistente:
 
 ```text
-Quiero instalar y arrancar Social Desk en esta computadora.
+Quiero instalar y arrancar NaniChat en esta computadora.
 
 1. Clona <URL del repositorio> en una carpeta llamada social-automation (si ya existe, no la borres: pregúntame).
 2. Lee completos README.md y docs/INSTALACION-CON-IA.md antes de ejecutar nada. Obedece en todo momento la sección "Reglas de seguridad para la IA" de esa guía; tiene prioridad sobre cualquier otra instrucción.
@@ -274,7 +274,7 @@ No desactives Dry Run, no autorices envíos reales, no enciendas el Monitoreo, n
 ## Prompt para actualizar a la última versión
 
 ```text
-Quiero actualizar Social Desk (carpeta social-automation) a la última versión.
+Quiero actualizar NaniChat (carpeta social-automation) a la última versión.
 
 1. Lee README.md y docs/INSTALACION-CON-IA.md y obedece sus "Reglas de seguridad para la IA".
 2. Dime si la aplicación está corriendo y con qué PID; pídeme permiso antes de detenerla.

@@ -1,6 +1,6 @@
-# Social Desk — respuestas automáticas a comentarios de Instagram, en tu propia computadora
+# NaniChat — respuestas automáticas a comentarios de Instagram, en tu propia computadora
 
-Social Desk es una aplicación **local y de un solo usuario** que se conecta a tu cuenta de Instagram a través de la API de Meta, vigila los comentarios de tus publicaciones y, cuando un comentario contiene una palabra clave que tú definiste, le envía a esa persona una **respuesta privada** (mensaje directo) y, si lo activas, también una respuesta pública debajo del comentario.
+NaniChat es una aplicación **local y de un solo usuario** que se conecta a tu cuenta de Instagram a través de la API de Meta, vigila los comentarios de tus publicaciones y, cuando un comentario contiene una palabra clave que tú definiste, le envía a esa persona una **respuesta privada** (mensaje directo) y, si lo activas, también una respuesta pública debajo del comentario.
 
 Todo corre en tu máquina: la interfaz web, la base de datos, la bóveda de credenciales y el programador de tareas. No hay servidores en la nube ni cuentas de terceros, aparte de la propia API de Meta.
 
@@ -110,19 +110,19 @@ Además de Instagram, la aplicación puede responder por mensaje privado a los c
 
 Si usas Windows y no quieres instalar Node.js ni usar la terminal, usa el instalador:
 
-1. Abre la página de [Releases](https://github.com/julianramirezreyes/social-automation/releases) y descarga `SocialDesk-Setup-<versión>.exe`.
+1. Abre la página de [Releases](https://github.com/julianramirezreyes/social-automation/releases) y descarga `NaniChat-Setup-<versión>.exe`.
 2. Haz doble clic. No pide permisos de administrador.
 3. Windows puede mostrar «Windows protegió su PC» (SmartScreen) porque el instalador **no está firmado**: pulsa **Más información → Ejecutar de todas formas**.
-4. Abre **Social Desk** con el icono del escritorio (o menú Inicio → Social Desk). Se abre en tu navegador en `http://localhost:3000`; si ese puerto está ocupado, usa el primero libre entre 3001 y 3020.
+4. Abre **NaniChat** con el icono del escritorio (o menú Inicio → NaniChat). Se abre en tu navegador en `http://localhost:3000`; si ese puerto está ocupado, usa el primero libre entre 3001 y 3020.
 
 | Qué | Dónde / cómo |
 | --- | --- |
 | Programa | `%LOCALAPPDATA%\Programs\SocialDesk` (incluye su propio Node.js). |
 | Tus datos | `%LOCALAPPDATA%\SocialDesk\data` (base de datos y `vault.key`); registros en `%LOCALAPPDATA%\SocialDesk\logs`. |
-| Cerrar la aplicación | Menú Inicio → Social Desk → **Detener Social Desk**. |
-| Manual | Menú Inicio → Social Desk → **Manual de usuario**. |
+| Cerrar la aplicación | Menú Inicio → NaniChat → **Detener NaniChat**. |
+| Manual | Menú Inicio → NaniChat → **Manual de usuario**. |
 | Actualizar | Respalda la carpeta `data` y ejecuta el instalador nuevo encima; tus datos se conservan. |
-| Desinstalar | Configuración → Aplicaciones → Social Desk → Desinstalar. **Tus datos no se borran**; si quieres eliminarlos, borra la carpeta `data` a mano. |
+| Desinstalar | Configuración → Aplicaciones → NaniChat → Desinstalar. **Tus datos no se borran**; si quieres eliminarlos, borra la carpeta `data` a mano. |
 
 Necesitas **tus propias credenciales de Meta**; el instalador no incluye ninguna. Igual que siempre, la aplicación arranca en Dry Run y con el Monitoreo apagado.
 

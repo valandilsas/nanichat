@@ -1,6 +1,6 @@
 ﻿<#
 .SYNOPSIS
-  Starts Social Desk (if it is not already running) and opens it in the default browser.
+  Starts NaniChat (if it is not already running) and opens it in the default browser.
 
 .DESCRIPTION
   Windows PowerShell 5.1 compatible. Installed layout (see packaging/windows/README.md):
@@ -10,7 +10,7 @@
   1. If this app already answers /api/health on the port saved in run\port.txt, only open the browser.
   2. If the PID in run\pid.txt is still this app starting up, wait for it instead of starting a second one.
   3. If the instance lock in data\ names a PID that now belongs to another program (Windows reuses PIDs and the app
-     cannot prove it is stale there), remove that stale lock. A lock owned by a live Social Desk is never touched.
+     cannot prove it is stale there), remove that stale lock. A lock owned by a live NaniChat is never touched.
   4. Pick port 3000, or the first free port 3001-3020, start node hidden with logs in logs\, wait for /api/health.
   On failure: message box with the log path and the last log lines (or console output with -Quiet), exit code 1.
 
@@ -60,15 +60,15 @@ function Write-LauncherLog([string]$Message) {
 
 function Show-Message([string]$Text, [string]$Kind = 'Information') {
   if (-not $Interactive) {
-    Write-Host "[Social Desk] $Text"
+    Write-Host "[NaniChat] $Text"
     return
   }
   try {
     Add-Type -AssemblyName System.Windows.Forms
     $icon = [System.Windows.Forms.MessageBoxIcon]::$Kind
-    [void][System.Windows.Forms.MessageBox]::Show($Text, 'Social Desk', [System.Windows.Forms.MessageBoxButtons]::OK, $icon)
+    [void][System.Windows.Forms.MessageBox]::Show($Text, 'NaniChat', [System.Windows.Forms.MessageBoxButtons]::OK, $icon)
   } catch {
-    Write-Host "[Social Desk] $Text"
+    Write-Host "[NaniChat] $Text"
   }
 }
 
@@ -151,7 +151,7 @@ function Stop-Tree([int]$ProcessId) {
 
 function Open-App([int]$Port) {
   if ($NoBrowser) {
-    Write-LauncherLog "Social Desk listo en http://localhost:$Port (sin abrir el navegador)"
+    Write-LauncherLog "NaniChat listo en http://localhost:$Port (sin abrir el navegador)"
     return
   }
   Write-LauncherLog "abriendo http://localhost:$Port"
@@ -188,7 +188,7 @@ try {
 
   foreach ($required in @($NodeExe, $StartScript)) {
     if (-not (Test-Path -LiteralPath $required)) {
-      Exit-WithError ("La instalación de Social Desk está incompleta: falta $required.`r`n`r`n" +
+      Exit-WithError ("La instalación de NaniChat está incompleta: falta $required.`r`n`r`n" +
         'Vuelve a ejecutar el instalador.')
     }
   }
@@ -222,7 +222,7 @@ try {
   Remove-RunFiles
 
   # 3. Instance lock left in data\. The app reclaims it by itself when the recorded PID is dead; Windows reuses PIDs,
-  #    so a lock whose PID now belongs to an unrelated program is removed here. A Social Desk owner is never touched.
+  #    so a lock whose PID now belongs to an unrelated program is removed here. A NaniChat owner is never touched.
   $lockText = Read-SmallFile $LockFile
   if ($lockText) {
     $lockPid = 0
@@ -231,7 +231,7 @@ try {
     if ($owner) {
       $commandLine = [string]$owner.CommandLine
       if ((Test-IsOurNode $owner) -or ($commandLine -match 'start\.mjs|server\.ts')) {
-        # Running Social Desk whose run files were lost: find it and open it.
+        # Running NaniChat whose run files were lost: find it and open it.
         foreach ($candidate in @($PreferredPort) + $FallbackPorts) {
           if (Test-Health $candidate) {
             Write-SmallFile $PidFile ([string]$lockPid)
@@ -241,8 +241,8 @@ try {
             exit 0
           }
         }
-        Exit-WithError ("Social Desk ya se está ejecutando (proceso $lockPid) con la misma carpeta de datos, " +
-          "pero no responde.`r`n`r`nUsa el acceso «Detener Social Desk» y vuelve a abrirlo. " +
+        Exit-WithError ("NaniChat ya se está ejecutando (proceso $lockPid) con la misma carpeta de datos, " +
+          "pero no responde.`r`n`r`nUsa el acceso «Detener NaniChat» y vuelve a abrirlo. " +
           "Si sigue igual, reinicia Windows.`r`n`r`nRegistro: $LauncherLog")
       } elseif ($owner.Name -ieq 'node.exe' -and -not $commandLine) {
         Write-LauncherLog "el bloqueo pertenece al PID $lockPid (node.exe, sin acceso a su línea de comandos); no se toca"
@@ -295,13 +295,13 @@ try {
   Write-LauncherLog "últimas líneas del registro:`r`n$tail"
   $advice = ''
   if ($tail -match 'already running or ownership is uncertain|recovery is uncertain') {
-    $advice = "`r`n`r`nOtra instancia de Social Desk parece estar usando la carpeta de datos. Usa «Detener Social Desk» " +
+    $advice = "`r`n`r`nOtra instancia de NaniChat parece estar usando la carpeta de datos. Usa «Detener NaniChat» " +
       "o reinicia Windows. Si estás seguro de que no hay ninguna abierta, borra los archivos de $RunDir y el archivo " +
-      "$LockFile, y vuelve a abrir Social Desk."
+      "$LockFile, y vuelve a abrir NaniChat."
   } elseif ($tail -match 'EADDRINUSE') {
     $advice = "`r`n`r`nEl puerto $port quedó ocupado por otro programa. Vuelve a intentarlo."
   }
-  Exit-WithError ("Social Desk no pudo iniciar: $reason.$advice`r`n`r`nRegistro: $outLog`r`n`r`nÚltimas líneas:`r`n$tail")
+  Exit-WithError ("NaniChat no pudo iniciar: $reason.$advice`r`n`r`nRegistro: $outLog`r`n`r`nÚltimas líneas:`r`n$tail")
 } catch {
-  Exit-WithError ("Error inesperado al iniciar Social Desk: $($_.Exception.Message)`r`n`r`nRegistro: $LauncherLog")
+  Exit-WithError ("Error inesperado al iniciar NaniChat: $($_.Exception.Message)`r`n`r`nRegistro: $LauncherLog")
 }

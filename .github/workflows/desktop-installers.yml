@@ -1,4 +1,4 @@
-# Builds the Social Desk desktop installers (Linux AppImage + deb on ubuntu-latest, Windows NSIS .exe on windows-latest)
+# Builds the NaniChat desktop installers (Linux AppImage + deb on ubuntu-latest, Windows NSIS .exe on windows-latest)
 # and, for v* tags, attaches them to the GitHub Release. Details: packaging/desktop/README.md.
 name: Desktop installers
 
@@ -91,7 +91,7 @@ jobs:
               }
             }
             fs.appendFileSync(process.env.GITHUB_OUTPUT, `node=${node}\napp=${app}\n`);
-            console.log(`Node.js ${node}, Social Desk ${app}`);
+            console.log(`Node.js ${node}, NaniChat ${app}`);
           '
 
       - name: Set up Node.js ${{ steps.versions.outputs.node }}
@@ -139,7 +139,7 @@ jobs:
           path: |
             dist/*.AppImage
             dist/*.deb
-            dist/SocialDesk-Desktop-Setup-*.exe
+            dist/NaniChat-Desktop-Setup-*.exe
             dist/SHA256SUMS-desktop-*.txt
           if-no-files-found: error
           retention-days: 30
@@ -183,11 +183,11 @@ jobs:
         run: |
           set -euo pipefail
           if ! gh release view "$TAG" >/dev/null 2>&1; then
-            gh release create "$TAG" --title "Social Desk ${VERSION}" --notes "Social Desk ${VERSION}" --verify-tag
+            gh release create "$TAG" --title "NaniChat ${VERSION}" --notes "NaniChat ${VERSION}" --verify-tag
           fi
           gh release upload "$TAG" \
             dist/*.AppImage \
             dist/*.deb \
-            dist/SocialDesk-Desktop-Setup-*.exe \
+            dist/NaniChat-Desktop-Setup-*.exe \
             dist/SHA256SUMS-desktop.txt \
             --clobber

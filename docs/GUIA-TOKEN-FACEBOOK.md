@@ -1,6 +1,6 @@
 # Guía del token de Facebook (Páginas)
 
-Esta guía explica cómo conseguir el token que Social Desk necesita para responder por mensaje privado a los comentarios de una **Página de Facebook**. Sigue la misma lógica que el capítulo 5 del [manual de usuario](manual/Manual-Social-Desk.pdf) («Conseguir el acceso con Facebook»), pero pensada para Páginas.
+Esta guía explica cómo conseguir el token que NaniChat necesita para responder por mensaje privado a los comentarios de una **Página de Facebook**. Sigue la misma lógica que el capítulo 5 del [manual de usuario](manual/Manual-Social-Desk.pdf) («Conseguir el acceso con Facebook»), pero pensada para Páginas.
 
 > **Habilitado por defecto, con partes sin verificar.** La compatibilidad con Páginas de Facebook está habilitada: no necesitas definir ninguna variable. Si inicias la aplicación con `SOCIAL_DESK_FACEBOOK_PAGES=0` (o `false`), «Probar y descubrir» solo lista cuentas de Instagram (ver [README](../README.md#variables-de-entorno)). Lee antes la sección [Qué está verificado y qué no](#qué-está-verificado-y-qué-no).
 
@@ -11,7 +11,7 @@ Esta guía explica cómo conseguir el token que Social Desk necesita para respon
 3. [Permisos](#permisos)
 4. [Obtener el token con el Explorador de la API Graph](#obtener-el-token-con-el-explorador-de-la-api-graph)
 5. [Convertirlo en un token de larga duración](#convertirlo-en-un-token-de-larga-duración)
-6. [Pegarlo en Social Desk](#pegarlo-en-social-desk)
+6. [Pegarlo en NaniChat](#pegarlo-en-nanichat)
 7. [Límites conocidos](#límites-conocidos)
 8. [Qué está verificado y qué no](#qué-está-verificado-y-qué-no)
 9. [Prompt para pegar a tu IA](#prompt-para-pegar-a-tu-ia)
@@ -19,7 +19,7 @@ Esta guía explica cómo conseguir el token que Social Desk necesita para respon
 
 ## Objetivo
 
-Obtener un **token de usuario de Facebook** con los permisos de Página necesarios. Social Desk lo guarda cifrado, usa `/me/accounts` para encontrar tus Páginas (y las cuentas de Instagram vinculadas) y, al seleccionar una Página, guarda también el token de esa Página, cifrado. Con él lee las publicaciones y los comentarios de la Página y envía una **respuesta privada** al comentario.
+Obtener un **token de usuario de Facebook** con los permisos de Página necesarios. NaniChat lo guarda cifrado, usa `/me/accounts` para encontrar tus Páginas (y las cuentas de Instagram vinculadas) y, al seleccionar una Página, guarda también el token de esa Página, cifrado. Con él lee las publicaciones y los comentarios de la Página y envía una **respuesta privada** al comentario.
 
 En esta guía el token se representa como `TU_TOKEN`. **Nunca lo pegues en un chat**, ni en un correo, ni en un repositorio.
 
@@ -71,7 +71,7 @@ También puedes consultar qué hace cada permiso (y cuáles usa NaniChat) en Con
 - **Token de usuario** (recomendado): NaniChat encuentra por sí mismo todas tus Páginas con `/me/accounts`.
 - **Token de una Página** directamente: si `/me/accounts` falla con el código 100, NaniChat asume que pegaste el token de una Página y la conecta usándolo; solo aparece esa Página (sin cuentas de Instagram vinculadas). El token de Página que da el Explorador es de **corta duración**, salvo que lo canjees por uno largo. *Este modo está **por verificar con una Página real**.*
 
-Comprobación opcional en el propio Explorador: la consulta `me/accounts` debe devolver tu Página. Social Desk hace esa misma consulta por ti en «Probar y descubrir».
+Comprobación opcional en el propio Explorador: la consulta `me/accounts` debe devolver tu Página. NaniChat hace esa misma consulta por ti en «Probar y descubrir».
 
 ## Convertirlo en un token de larga duración
 
@@ -85,11 +85,11 @@ GET https://graph.facebook.com/{versión}/oauth/access_token
     &fb_exchange_token={TU_TOKEN_CORTO}
 ```
 
-> **Seguridad.** Esta llamada necesita el **secreto de la app**. **Nunca lo compartas** (ni con una IA, ni en un chat, ni en un repositorio) y ejecútala **solo en tu propio equipo**. Social Desk nunca te pedirá el secreto de la app. Si no te sientes cómodo, pídele ayuda a una persona técnica de confianza.
+> **Seguridad.** Esta llamada necesita el **secreto de la app**. **Nunca lo compartas** (ni con una IA, ni en un chat, ni en un repositorio) y ejecútala **solo en tu propio equipo**. NaniChat nunca te pedirá el secreto de la app. Si no te sientes cómodo, pídele ayuda a una persona técnica de confianza.
 
 Con el [Depurador de tokens de acceso](https://developers.facebook.com/tools/debug/accesstoken/) puedes comprobar cuándo vence un token y qué permisos tiene, antes de pegarlo en la aplicación. Cuando venza (o Meta lo invalide, `facebook_token_invalid`), repite el proceso y actualiza la conexión.
 
-## Pegarlo en Social Desk
+## Pegarlo en NaniChat
 
 1. Inicia la aplicación como siempre (las Páginas vienen habilitadas; si definiste `SOCIAL_DESK_FACEBOOK_PAGES=0`, quítala y reinicia).
 2. En **Conexiones > Nueva conexión**, elige **Facebook Login · token de usuario y página vinculada**, escribe un nombre y pega el token en el campo oculto. Guarda la conexión.
@@ -106,7 +106,7 @@ Con el [Depurador de tokens de acceso](https://developers.facebook.com/tools/deb
 - **Una respuesta privada por comentario**, según Meta: si la misma persona comenta dos veces, recibe dos mensajes.
 - **Quien comenta con rol en tu app (o usa la app)** llega con autor y Meta responde `can_reply_privately=false`: queda en Revisión pendiente como `private_reply_unavailable` y no se envía nada.
 - **Ventana de 7 días** desde el comentario; después el elemento expira.
-- **Otra automatización compite por la única respuesta privada.** Si otra herramienta (por ejemplo, Meta Business Suite) responde a los mismos comentarios, la que llegue primero consume la única respuesta privada. **Desactívala antes** de usar Social Desk en esa Página.
+- **Otra automatización compite por la única respuesta privada.** Si otra herramienta (por ejemplo, Meta Business Suite) responde a los mismos comentarios, la que llegue primero consume la única respuesta privada. **Desactívala antes** de usar NaniChat en esa Página.
 - **Resultado dudoso (`UNKNOWN_OUTCOME`):** nunca se reintenta automáticamente; lo resuelves tú a mano.
 
 ## Qué está verificado y qué no
@@ -132,14 +132,14 @@ Con el [Depurador de tokens de acceso](https://developers.facebook.com/tools/deb
 Copia este bloque en tu asistente para que te acompañe **paso a paso**:
 
 ```text
-Quiero conseguir el token de Facebook para usar una Página con Social Desk (la compatibilidad con Páginas está habilitada por defecto, pero algunas partes no están verificadas).
+Quiero conseguir el token de Facebook para usar una Página con NaniChat (la compatibilidad con Páginas está habilitada por defecto, pero algunas partes no están verificadas).
 
-Lee completa la guía docs/GUIA-TOKEN-FACEBOOK.md del repositorio de Social Desk antes de ayudarme y úsala como única fuente, junto con la documentación oficial de Meta.
+Lee completa la guía docs/GUIA-TOKEN-FACEBOOK.md del repositorio de NaniChat antes de ayudarme y úsala como única fuente, junto con la documentación oficial de Meta.
 
 Reglas:
 1. Guíame UN solo paso a la vez. Espera a que te diga que lo terminé antes de dar el siguiente.
 2. Nunca me pidas el token, el secreto de la app, contraseñas ni códigos de verificación en el chat. Si los escribo por error, dime que los ignoras y que debo revocarlos o regenerarlos.
-3. No me pidas que pegue el token en ningún sitio que no sea el campo oculto de «Conexiones» de Social Desk.
+3. No me pidas que pegue el token en ningún sitio que no sea el campo oculto de «Conexiones» de NaniChat.
 4. Si no estás seguro de un nombre de permiso, un botón o un punto de acceso de Meta, verifícalo en la documentación oficial de Meta antes de decírmelo y dime cuando algo no pudo verificarse.
 5. El canje por un token de larga duración usa el secreto de mi app: explícame cómo hacerlo en mi propio equipo sin compartirlo, o dime que se lo pida a una persona técnica de confianza.
 6. No actives el modo real ni autorices envíos reales: todo empieza en Dry Run.

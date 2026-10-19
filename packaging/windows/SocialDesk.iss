@@ -1,4 +1,4 @@
-﻿; Social Desk — Windows installer (Inno Setup 6, per-user, no administrator rights).
+﻿; NaniChat — Windows installer (Inno Setup 6, per-user, no administrator rights).
 ;
 ; Compile (the CI workflow does this after build-payload.mjs):
 ;   ISCC.exe /DAppVersion=0.1.0 /DPayloadDir=C:\path\dist\payload /DOutputDir=C:\path\dist\installer SocialDesk.iss
@@ -17,7 +17,7 @@
   #define OutputDir AddBackslash(SourcePath) + "..\..\dist\installer"
 #endif
 
-#define AppName "Social Desk"
+#define AppName "NaniChat"
 #define PowerShellExe "{sys}\WindowsPowerShell\v1.0\powershell.exe"
 #define PsArgs "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File"
 #define IconFile "{app}\launcher\social-desk.ico"
@@ -28,7 +28,7 @@ AppId={{6F1E2D3C-4B5A-4E69-8D7C-1A2B3C4D5E6F}
 AppName={#AppName}
 AppVersion={#AppVersion}
 AppVerName={#AppName} {#AppVersion}
-AppPublisher=Social Desk
+AppPublisher=NaniChat
 AppPublisherURL=https://github.com/julianramirezreyes/social-automation
 AppSupportURL=https://github.com/julianramirezreyes/social-automation/issues
 AppUpdatesURL=https://github.com/julianramirezreyes/social-automation/releases
@@ -42,7 +42,7 @@ ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
 MinVersion=10.0
 OutputDir={#OutputDir}
-OutputBaseFilename=SocialDesk-Setup-{#AppVersion}
+OutputBaseFilename=NaniChat-Setup-{#AppVersion}
 Compression=lzma2/max
 SolidCompression=yes
 LZMAUseSeparateProcess=yes
@@ -74,13 +74,13 @@ Type: filesandordirs; Name: "{app}\docs"
 Source: "{#PayloadDir}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 
 [Icons]
-Name: "{group}\Social Desk"; Filename: "{#PowerShellExe}"; Parameters: "{#PsArgs} ""{app}\launcher\launch.ps1"""; WorkingDir: "{app}"; IconFilename: "{#IconFile}"; Comment: "Abre Social Desk en el navegador"
-Name: "{group}\Detener Social Desk"; Filename: "{#PowerShellExe}"; Parameters: "{#PsArgs} ""{app}\launcher\stop.ps1"""; WorkingDir: "{app}"; IconFilename: "{#IconFile}"; Comment: "Cierra Social Desk"
-Name: "{group}\Manual de usuario"; Filename: "{app}\docs\Manual-Social-Desk.pdf"; Comment: "Manual de usuario de Social Desk (PDF)"
-Name: "{autodesktop}\Social Desk"; Filename: "{#PowerShellExe}"; Parameters: "{#PsArgs} ""{app}\launcher\launch.ps1"""; WorkingDir: "{app}"; IconFilename: "{#IconFile}"; Comment: "Abre Social Desk en el navegador"; Tasks: desktopicon
+Name: "{group}\NaniChat"; Filename: "{#PowerShellExe}"; Parameters: "{#PsArgs} ""{app}\launcher\launch.ps1"""; WorkingDir: "{app}"; IconFilename: "{#IconFile}"; Comment: "Abre NaniChat en el navegador"
+Name: "{group}\Detener NaniChat"; Filename: "{#PowerShellExe}"; Parameters: "{#PsArgs} ""{app}\launcher\stop.ps1"""; WorkingDir: "{app}"; IconFilename: "{#IconFile}"; Comment: "Cierra NaniChat"
+Name: "{group}\Manual de usuario"; Filename: "{app}\docs\Manual-Social-Desk.pdf"; Comment: "Manual de usuario de NaniChat (PDF)"
+Name: "{autodesktop}\NaniChat"; Filename: "{#PowerShellExe}"; Parameters: "{#PsArgs} ""{app}\launcher\launch.ps1"""; WorkingDir: "{app}"; IconFilename: "{#IconFile}"; Comment: "Abre NaniChat en el navegador"; Tasks: desktopicon
 
 [Run]
-Filename: "{#PowerShellExe}"; Parameters: "{#PsArgs} ""{app}\launcher\launch.ps1"""; WorkingDir: "{app}"; Description: "Abrir Social Desk al terminar"; Flags: postinstall nowait skipifsilent runhidden
+Filename: "{#PowerShellExe}"; Parameters: "{#PsArgs} ""{app}\launcher\launch.ps1"""; WorkingDir: "{app}"; Description: "Abrir NaniChat al terminar"; Flags: postinstall nowait skipifsilent runhidden
 
 [UninstallRun]
 ; Stop the server before its files are removed. Runs in silent uninstalls too.
@@ -108,7 +108,7 @@ begin
   StopScript := ExpandConstant('{app}\launcher\stop.ps1');
   if not FileExists(StopScript) then
     Exit;
-  Log('Stopping a running Social Desk before copying files: ' + StopScript);
+  Log('Stopping a running NaniChat before copying files: ' + StopScript);
   if Exec(ExpandConstant('{sys}\WindowsPowerShell\v1.0\powershell.exe'),
     '-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File "' + StopScript + '" -Quiet',
     '', SW_HIDE, ewWaitUntilTerminated, ResultCode) then
@@ -127,9 +127,9 @@ end;
 procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
 begin
   if (CurUninstallStep = usPostUninstall) and (not UninstallSilent()) then
-    MsgBox('Social Desk se desinstaló.' + #13#10#13#10 +
+    MsgBox('NaniChat se desinstaló.' + #13#10#13#10 +
       'Tus datos (base de datos, credenciales cifradas y su llave vault.key) se conservaron en:' + #13#10 +
       ExpandConstant('{localappdata}\SocialDesk\data') + #13#10#13#10 +
-      'Si vuelves a instalar Social Desk, los encontrará ahí. Si quieres borrarlos para siempre, borra esa carpeta a mano ' +
+      'Si vuelves a instalar NaniChat, los encontrará ahí. Si quieres borrarlos para siempre, borra esa carpeta a mano ' +
       '(no se puede deshacer).', mbInformation, MB_OK);
 end;

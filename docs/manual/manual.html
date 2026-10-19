@@ -3,8 +3,8 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Social Desk — Manual de usuario</title>
-  <meta name="description" content="Manual de usuario de Social Desk: instalación, acceso a la API de Meta y uso diario de la automatización de respuestas privadas a comentarios de Instagram.">
+  <title>NaniChat — Manual de usuario</title>
+  <meta name="description" content="Manual de usuario de NaniChat: instalación, acceso a la API de Meta y uso diario de la automatización de respuestas privadas a comentarios de Instagram.">
   <link rel="stylesheet" href="manual.css">
 </head>
 <body>
@@ -14,7 +14,7 @@
 <section class="cover" aria-label="Portada">
   <div class="cover-top">
     <div class="cover-mark" aria-hidden="true">S</div>
-    <h1>Social Desk — Manual de usuario</h1>
+    <h1>NaniChat — Manual de usuario</h1>
     <p class="subtitle">Responde por mensaje privado, de forma automática y segura, a quienes comentan tus publicaciones de Instagram. Todo funciona en tu propio computador.</p>
   </div>
   <div>
@@ -23,7 +23,7 @@
       <div><strong>Edición del manual</strong>Octubre de 2026</div>
       <div><strong>Para quién</strong>Personas sin conocimientos técnicos que usan la app en su equipo</div>
     </div>
-    <p class="cover-foot">Social Desk es una herramienta local de un solo usuario. Este manual no está afiliado a Meta, Instagram ni Facebook. Los nombres de botones del panel de Meta cambian con frecuencia: sigue siempre la documentación oficial enlazada en cada capítulo.</p>
+    <p class="cover-foot">NaniChat es una herramienta local de un solo usuario. Este manual no está afiliado a Meta, Instagram ni Facebook. Los nombres de botones del panel de Meta cambian con frecuencia: sigue siempre la documentación oficial enlazada en cada capítulo.</p>
   </div>
 </section>
 
@@ -31,7 +31,7 @@
 <nav class="toc" aria-labelledby="toc-title">
   <h1 id="toc-title">Índice</h1>
   <ol>
-    <li><a href="#cap1"><span class="toc-num">1</span>Qué es Social Desk y cómo funciona</a>
+    <li><a href="#cap1"><span class="toc-num">1</span>Qué es NaniChat y cómo funciona</a>
       <ol><li><a href="#cap1-flujo">El recorrido de un comentario</a></li><li><a href="#cap1-puede">Lo que puede y no puede hacer</a></li><li><a href="#cap1-reglas">Las reglas de Meta</a></li></ol></li>
     <li><a href="#cap2"><span class="toc-num">2</span>Antes de empezar</a>
       <ol><li><a href="#cap2-req">Requisitos</a></li><li><a href="#cap2-quien">Quién puede usarla hoy</a></li><li><a href="#cap2-limites">Límites honestos</a></li></ol></li>
@@ -63,19 +63,19 @@
 <section class="chapter" id="cap1" aria-labelledby="cap1-title">
   <header class="chapter-head">
     <span class="chapter-num">Capítulo 1</span>
-    <h1 id="cap1-title">Qué es Social Desk y cómo funciona</h1>
+    <h1 id="cap1-title">Qué es NaniChat y cómo funciona</h1>
     <p class="lead">Una herramienta que vigila los comentarios de tus publicaciones de Instagram y, cuando alguien escribe una palabra clave, le responde por mensaje privado.</p>
   </header>
 
-  <p>Seguramente has visto publicaciones que dicen «comenta <em>GUÍA</em> y te la envío por mensaje». Social Desk hace ese trabajo por ti. Tú decides qué publicaciones vigilar, qué palabras activan la respuesta y qué mensaje se envía. La app se encarga de revisar los comentarios, preparar el mensaje y enviarlo respetando las reglas de Meta.</p>
-  <p>Todo funciona en <strong>tu propio computador</strong>. No hay servidores en la nube ni cuentas de Social Desk. Tus tokens y tus datos se quedan en tu equipo, cifrados.</p>
+  <p>Seguramente has visto publicaciones que dicen «comenta <em>GUÍA</em> y te la envío por mensaje». NaniChat hace ese trabajo por ti. Tú decides qué publicaciones vigilar, qué palabras activan la respuesta y qué mensaje se envía. La app se encarga de revisar los comentarios, preparar el mensaje y enviarlo respetando las reglas de Meta.</p>
+  <p>Todo funciona en <strong>tu propio computador</strong>. No hay servidores en la nube ni cuentas de NaniChat. Tus tokens y tus datos se quedan en tu equipo, cifrados.</p>
 
   <h2 id="cap1-flujo">El recorrido de un comentario</h2>
   <p>Este es el camino que sigue cada comentario, de principio a fin:</p>
 
   <figure class="diagram">
     <svg viewBox="0 0 900 250" role="img" aria-labelledby="flow-title flow-desc" xmlns="http://www.w3.org/2000/svg">
-      <title id="flow-title">Flujo de un comentario en Social Desk</title>
+      <title id="flow-title">Flujo de un comentario en NaniChat</title>
       <desc id="flow-desc">Cinco pasos: comentario, detección, cola, mensaje privado y respuesta pública opcional. En modo prueba el flujo se detiene en la cola como elemento simulado.</desc>
       <defs>
         <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
@@ -156,13 +156,13 @@
   </div>
 
   <h2 id="cap1-reglas">Las reglas de Meta que debes conocer</h2>
-  <p>Social Desk usa la función oficial de Meta llamada <strong>respuesta privada</strong> (<em>private reply</em>). Según la documentación oficial de Meta, estas son sus reglas:</p>
+  <p>NaniChat usa la función oficial de Meta llamada <strong>respuesta privada</strong> (<em>private reply</em>). Según la documentación oficial de Meta, estas son sus reglas:</p>
   <ul>
     <li><strong>Un solo mensaje por comentario.</strong> Solo se puede enviar un mensaje a la persona que comentó.</li>
     <li><strong>Ventana de 7 días.</strong> El mensaje debe enviarse dentro de los 7 días posteriores al comentario. En Instagram Live, solo durante la transmisión.</li>
-    <li><strong>Seguimiento solo si te responden.</strong> Solo puedes seguir la conversación si la persona contesta, y dentro de las 24 horas posteriores a su respuesta. Social Desk no envía mensajes de seguimiento.</li>
+    <li><strong>Seguimiento solo si te responden.</strong> Solo puedes seguir la conversación si la persona contesta, y dentro de las 24 horas posteriores a su respuesta. NaniChat no envía mensajes de seguimiento.</li>
     <li><strong>Bandeja de destino.</strong> Si la persona sigue tu cuenta, el mensaje llega a su bandeja de entrada principal. Si no te sigue, llega a la carpeta de <strong>Solicitudes</strong> de mensajes. El mensaje incluye un enlace a la publicación comentada.</li>
-    <li><strong>Límite de volumen.</strong> Meta permite hasta <strong>750 llamadas por hora por cuenta profesional</strong> para respuestas privadas a comentarios en publicaciones y reels. Social Desk va mucho más despacio a propósito (un envío como mínimo cada 10 segundos).</li>
+    <li><strong>Límite de volumen.</strong> Meta permite hasta <strong>750 llamadas por hora por cuenta profesional</strong> para respuestas privadas a comentarios en publicaciones y reels. NaniChat va mucho más despacio a propósito (un envío como mínimo cada 10 segundos).</li>
   </ul>
 
   <div class="callout importante">
@@ -201,7 +201,7 @@
       <tr><td>Una cuenta profesional de Instagram</td><td>De tipo <strong>Empresa</strong> o <strong>Creador</strong>. Las cuentas personales no funcionan con la API de Meta. La cuenta debe ser pública.</td></tr>
       <tr><td>Una cuenta de desarrollador de Meta</td><td>Gratuita. Se crea con tu cuenta de Facebook (capítulo 4).</td></tr>
       <tr><td>Una app de Meta</td><td>No es una app que publiques: es el «registro» que Meta usa para darte permisos. Se crea en el panel de apps (capítulo 4).</td></tr>
-      <tr><td>Un token de acceso</td><td>Una clave larga que Meta te entrega. Se pega una sola vez en Social Desk.</td></tr>
+      <tr><td>Un token de acceso</td><td>Una clave larga que Meta te entrega. Se pega una sola vez en NaniChat.</td></tr>
       <tr><td>Solo para Facebook Login</td><td>Una página de Facebook vinculada a tu cuenta profesional de Instagram (capítulo 5).</td></tr>
     </tbody>
   </table>
@@ -220,7 +220,7 @@
   </table>
 
   <h2 id="cap2-quien">Quién puede usarla hoy</h2>
-  <p>Social Desk es una <strong>herramienta local de un solo usuario</strong>. Está pensada para que tú administres <strong>tus propias cuentas</strong> (o las que gestionas directamente), desde tu computador.</p>
+  <p>NaniChat es una <strong>herramienta local de un solo usuario</strong>. Está pensada para que tú administres <strong>tus propias cuentas</strong> (o las que gestionas directamente), desde tu computador.</p>
   <ul>
     <li>No tiene usuarios ni contraseñas propias: quien use tu computador puede usarla.</li>
     <li>Solo responde desde la misma máquina (<code>localhost</code>). No se puede abrir desde otro equipo ni desde el celular por internet.</li>
@@ -267,7 +267,7 @@
 
   <h2 id="cap3-instalar">Paso 2: instalar la app</h2>
   <ol class="steps">
-    <li>Copia la carpeta de Social Desk (por ejemplo, <code>social-automation</code>) en tu computador.</li>
+    <li>Copia la carpeta de NaniChat (por ejemplo, <code>social-automation</code>) en tu computador.</li>
     <li>En la terminal, entra a esa carpeta. Por ejemplo:
       <pre><code>cd ~/social-automation</code></pre></li>
     <li>Instala las dependencias (descarga lo que la app necesita; tarda unos minutos):
@@ -322,7 +322,7 @@
       <li>El archivo <code>data/vault.key</code>.</li>
       <li>La carpeta <code>data/</code> completa (ni por correo, ni en la nube, ni en un repositorio).</li>
       <li>Tus tokens de acceso de Meta, ni siquiera por chat con soporte.</li>
-      <li>El secreto de tu app de Meta (<em>App Secret</em>). Social Desk nunca te lo pide.</li>
+      <li>El secreto de tu app de Meta (<em>App Secret</em>). NaniChat nunca te lo pide.</li>
     </ul>
     <p>Quien tenga la base de datos <strong>y</strong> la llave puede leer tus tokens y actuar en tu cuenta.</p>
   </div>
@@ -339,7 +339,7 @@
   </div>
   <div class="callout consejo">
     <span class="callout-title">Consejo</span>
-    <p>Antes de instalar una versión nueva de Social Desk, haz siempre una copia de <code>data/</code>. Algunas versiones actualizan la estructura de la base de datos la primera vez que arrancan.</p>
+    <p>Antes de instalar una versión nueva de NaniChat, haz siempre una copia de <code>data/</code>. Algunas versiones actualizan la estructura de la base de datos la primera vez que arrancan.</p>
   </div>
 </section>
 
@@ -374,7 +374,7 @@
   <h2 id="cap4-app">Paso B: crear la app de Meta</h2>
   <ol class="steps">
     <li>En el panel de apps (<a href="https://developers.facebook.com/apps">developers.facebook.com/apps</a>), busca la opción para <strong>crear una app</strong>.</li>
-    <li>Escribe un nombre (por ejemplo «Social Desk de @tu_cuenta») y tu correo de contacto.</li>
+    <li>Escribe un nombre (por ejemplo «NaniChat de @tu_cuenta») y tu correo de contacto.</li>
     <li>Elige el <strong>caso de uso</strong>. Busca el relacionado con <strong>administrar mensajes y contenido en Instagram</strong>. En versiones anteriores del panel, la documentación en español indica elegir el caso de uso <strong>Otro</strong> y luego el tipo de app <strong>Empresa</strong>. Elige lo que tu panel ofrezca para Instagram.</li>
     <li>Cuando te pregunte por un <strong>portfolio comercial</strong>, puedes elegir no conectarlo por ahora si la app es solo para tu propia cuenta.</li>
     <li>Revisa el resumen y entra al panel de tu nueva app.</li>
@@ -413,13 +413,13 @@
   <ol class="steps">
     <li>En <strong>Instagram &gt; API setup with Instagram login</strong>, junto a tu cuenta, pulsa <strong>Generate token</strong> (Generar token).</li>
     <li>Inicia sesión en Instagram si te lo pide y acepta los permisos.</li>
-    <li>Copia el token que aparece. <strong>Guárdalo solo el tiempo justo</strong> para pegarlo en Social Desk (capítulo 8).</li>
+    <li>Copia el token que aparece. <strong>Guárdalo solo el tiempo justo</strong> para pegarlo en NaniChat (capítulo 8).</li>
   </ol>
   <p><strong>¿Cómo luce un token?</strong> Es una cadena larga de letras y números, sin espacios. En este manual lo representamos como <code>TU_TOKEN</code>. Nunca lo publiques ni lo pegues en un chat.</p>
 
   <div class="callout seguridad">
     <span class="callout-title">Seguridad</span>
-    <p>El token da acceso a tu cuenta de Instagram con los permisos que aceptaste. Trátalo como una contraseña. En Social Desk se pega en un campo oculto y, una vez guardado, la app no vuelve a mostrarlo nunca.</p>
+    <p>El token da acceso a tu cuenta de Instagram con los permisos que aceptaste. Trátalo como una contraseña. En NaniChat se pega en un campo oculto y, una vez guardado, la app no vuelve a mostrarlo nunca.</p>
   </div>
 
   <h2 id="cap4-renovar">Duración y renovación del token</h2>
@@ -432,14 +432,14 @@
   <h3>La forma más sencilla de renovarlo</h3>
   <ol class="steps">
     <li>Antes de que se cumplan los 60 días, vuelve a <strong>Instagram &gt; API setup with Instagram login</strong> y genera un token nuevo.</li>
-    <li>En Social Desk, ve a <span class="ui">Conexiones</span>, pulsa <span class="ui">Editar</span> en tu conexión, pega el token nuevo en <span class="ui">Nuevo token · captura opcional</span> y pulsa <span class="ui">Guardar cambios</span>.</li>
+    <li>En NaniChat, ve a <span class="ui">Conexiones</span>, pulsa <span class="ui">Editar</span> en tu conexión, pega el token nuevo en <span class="ui">Nuevo token · captura opcional</span> y pulsa <span class="ui">Guardar cambios</span>.</li>
     <li>Pulsa <span class="ui">Probar y descubrir</span> para validarla de nuevo y vuelve a encender el monitoreo.</li>
   </ol>
   <p class="note">Usuarios avanzados: Meta también ofrece el punto de conexión <code>GET https://graph.instagram.com/refresh_access_token</code> con <code>grant_type=ig_refresh_token</code>. Ese método pone el token en la dirección web; si lo usas, no lo hagas desde el navegador (quedaría en el historial).</p>
 
   <div class="callout consejo">
     <span class="callout-title">Consejo</span>
-    <p>Anota en tu calendario un recordatorio a los 50 días de generar el token. Social Desk no te avisa del vencimiento: simplemente dejará de funcionar y la conexión aparecerá como <span class="ui">Token inválido</span>. La herramienta oficial <a href="https://developers.facebook.com/tools/debug/accesstoken/">Depurador de tokens de acceso</a> de Meta muestra la fecha de vencimiento de un token.</p>
+    <p>Anota en tu calendario un recordatorio a los 50 días de generar el token. NaniChat no te avisa del vencimiento: simplemente dejará de funcionar y la conexión aparecerá como <span class="ui">Token inválido</span>. La herramienta oficial <a href="https://developers.facebook.com/tools/debug/accesstoken/">Depurador de tokens de acceso</a> de Meta muestra la fecha de vencimiento de un token.</p>
   </div>
 
   <div class="sources">
@@ -506,7 +506,7 @@
   </div>
 
   <h2 id="cap5-token">Obtener el token de usuario con el Explorador de la API Graph</h2>
-  <p>Social Desk necesita un <strong>token de usuario de Facebook</strong>. Al seleccionar la cuenta, la app obtiene sola el token de la página vinculada y lo guarda cifrado.</p>
+  <p>NaniChat necesita un <strong>token de usuario de Facebook</strong>. Al seleccionar la cuenta, la app obtiene sola el token de la página vinculada y lo guarda cifrado.</p>
   <ol class="steps">
     <li>Abre el <a href="https://developers.facebook.com/tools/explorer">Explorador de la API Graph</a> con tu usuario de Facebook.</li>
     <li>Elige tu app de Meta en el selector de apps.</li>
@@ -515,7 +515,7 @@
     <li>Genera el token. Meta te pedirá aceptar los permisos y puede preguntarte qué páginas y cuentas de Instagram autorizas: incluye la página vinculada a tu cuenta.</li>
     <li>Copia el token del campo de token de acceso. Ese es tu <code>TU_TOKEN</code>.</li>
   </ol>
-  <p class="note">Puedes comprobar que funciona con la consulta <code>me/accounts</code>: debe devolver tu página. Con el ID de la página, la consulta <code>{id-de-la-página}?fields=instagram_business_account</code> devuelve tu cuenta de Instagram. Social Desk hace estas dos consultas por ti en el paso «Probar y descubrir».</p>
+  <p class="note">Puedes comprobar que funciona con la consulta <code>me/accounts</code>: debe devolver tu página. Con el ID de la página, la consulta <code>{id-de-la-página}?fields=instagram_business_account</code> devuelve tu cuenta de Instagram. NaniChat hace estas dos consultas por ti en el paso «Probar y descubrir».</p>
 
   <h2 id="cap5-largo">Tokens de larga duración</h2>
   <p>Los tokens de usuario y de página predeterminados son <strong>de corta duración</strong> (expiran en horas). Para no tener que repetir el proceso a cada rato:</p>
@@ -523,11 +523,11 @@
     <li><strong>Token de usuario de larga duración (unos 60 días).</strong> Meta permite canjear un token de corta duración por uno largo con <code>GET https://graph.facebook.com/{versión}/oauth/access_token</code> usando <code>grant_type=fb_exchange_token</code>, el ID de la app, el <strong>secreto de la app</strong> y el token corto.</li>
     <li><strong>Token de página sin vencimiento.</strong> Según Meta, si consultas tus páginas (<code>/{id-de-usuario}/accounts</code>) con un token de usuario de larga duración, los tokens de página que recibes <strong>no tienen fecha de vencimiento</strong>; solo expiran o se invalidan en ciertas condiciones que Meta describe en su guía de errores de tokens (verifica en la documentación oficial cuáles son).</li>
   </ol>
-  <p>Social Desk hace el paso 2 por ti: si pegas un token de usuario de larga duración, el token de página que obtiene al seleccionar la cuenta será de larga duración.</p>
+  <p>NaniChat hace el paso 2 por ti: si pegas un token de usuario de larga duración, el token de página que obtiene al seleccionar la cuenta será de larga duración.</p>
 
   <div class="callout seguridad">
     <span class="callout-title">Seguridad</span>
-    <p>El canje del paso 1 requiere el <strong>secreto de la app</strong>. Meta advierte que esa llamada debe hacerse en un servidor y que el secreto nunca debe compartirse ni exponerse. Si no te sientes cómodo haciéndolo, pide ayuda a una persona técnica de confianza. Social Desk nunca te pedirá el secreto de la app.</p>
+    <p>El canje del paso 1 requiere el <strong>secreto de la app</strong>. Meta advierte que esa llamada debe hacerse en un servidor y que el secreto nunca debe compartirse ni exponerse. Si no te sientes cómodo haciéndolo, pide ayuda a una persona técnica de confianza. NaniChat nunca te pedirá el secreto de la app.</p>
   </div>
 
   <div class="callout consejo">
@@ -557,7 +557,7 @@
   <header class="chapter-head">
     <span class="chapter-num">Capítulo 6</span>
     <h1 id="cap6-title">Modo desarrollo, modo Live y revisión de Meta</h1>
-    <p class="lead">Para usar Social Desk con tu propia cuenta no necesitas la revisión de Meta. Para atender cuentas de otras personas, sí.</p>
+    <p class="lead">Para usar NaniChat con tu propia cuenta no necesitas la revisión de Meta. Para atender cuentas de otras personas, sí.</p>
   </header>
 
   <h2>Los dos modos de una app de Meta</h2>
@@ -600,7 +600,7 @@
   </ul>
   <div class="callout importante">
     <span class="callout-title">Importante</span>
-    <p>Social Desk funciona solo en tu computador (<code>localhost</code>) y no tiene un botón de inicio de sesión de Meta. Meta rechaza las solicitudes que sus revisores no pueden probar. Hoy, la app <strong>no está preparada para pasar la revisión de Meta</strong>: úsala solo con cuentas propias o que administras, con tu app en modo desarrollo.</p>
+    <p>NaniChat funciona solo en tu computador (<code>localhost</code>) y no tiene un botón de inicio de sesión de Meta. Meta rechaza las solicitudes que sus revisores no pueden probar. Hoy, la app <strong>no está preparada para pasar la revisión de Meta</strong>: úsala solo con cuentas propias o que administras, con tu app en modo desarrollo.</p>
   </div>
 
   <h2>Verificación del negocio</h2>
@@ -642,7 +642,7 @@
   <p>Al abrir <code>http://localhost:3000</code> verás la pantalla <strong>Resumen</strong>. Mientras no hayas terminado la configuración, aparece el panel <strong>Primeros pasos</strong> con cuatro tareas.</p>
 
   <figure>
-    <img src="images/01-dashboard-onboarding.png" alt="Pantalla Resumen de Social Desk con la barra lateral, el selector de cuenta, el aviso de modo prueba y el panel Primeros pasos con cuatro tareas.">
+    <img src="images/01-dashboard-onboarding.png" alt="Pantalla Resumen de NaniChat con la barra lateral, el selector de cuenta, el aviso de modo prueba y el panel Primeros pasos con cuatro tareas.">
     <figcaption>La pantalla Resumen al empezar. El panel «Primeros pasos» marca la siguiente tarea y lleva directo a la sección correspondiente.</figcaption>
   </figure>
 
@@ -717,7 +717,7 @@
   <h2>En pantallas pequeñas</h2>
   <p>La interfaz se adapta a ventanas estrechas: la navegación y los paneles se reorganizan en una sola columna.</p>
   <figure class="narrow">
-    <img src="images/21-mobile.png" alt="Social Desk en una ventana estrecha, con la navegación y los paneles en una sola columna.">
+    <img src="images/21-mobile.png" alt="NaniChat en una ventana estrecha, con la navegación y los paneles en una sola columna.">
     <figcaption>Vista en una ventana estrecha. Recuerda que la app solo se abre en el mismo computador donde se ejecuta: no está disponible desde tu teléfono por internet.</figcaption>
   </figure>
 </section>
@@ -812,7 +812,7 @@
   </table>
   <div class="callout seguridad">
     <span class="callout-title">Seguridad</span>
-    <p>Desconectar o eliminar en Social Desk <strong>no revoca el token en Meta</strong>. Si crees que tu token se filtró, quita también el acceso de la app desde la configuración de tu cuenta de Meta o genera uno nuevo (verifica en la documentación oficial de Meta cómo revocar el acceso).</p>
+    <p>Desconectar o eliminar en NaniChat <strong>no revoca el token en Meta</strong>. Si crees que tu token se filtró, quita también el acceso de la app desde la configuración de tu cuenta de Meta o genera uno nuevo (verifica en la documentación oficial de Meta cómo revocar el acceso).</p>
   </div>
 
   <h2>Retención heredada</h2>
@@ -1396,7 +1396,7 @@
     <li>Haz copias de <code>data/</code> en un lugar privado y cifrado.</li>
     <li>No escribas tokens en documentos, correos ni chats. Pégalos directamente en el campo de la app.</li>
     <li>Si sospechas que un token se filtró, genera uno nuevo en Meta, revoca el anterior (consulta la documentación oficial de Meta) y actualízalo en <span class="ui">Editar</span>.</li>
-    <li>Nunca pongas el secreto de tu app de Meta en ningún campo de Social Desk.</li>
+    <li>Nunca pongas el secreto de tu app de Meta en ningún campo de NaniChat.</li>
   </ul>
 
   <h2>Privacidad de quienes comentan</h2>
@@ -1455,7 +1455,7 @@
       <tr><td>«Lectura confirmada, pero el contenido leído no coincide»</td><td>Meta devolvió el mensaje con otro formato o los botones no se leyeron igual.</td><td>No se reenvía nada. Revisa en Instagram cómo se ve. Si el texto se ve bien, puedes ignorarlo.</td></tr>
       <tr><td>«No se pudo leer: … (El remitente no coincide con la cuenta)»</td><td>La lectura de Meta no coincide con tu cuenta.</td><td>Verifica que la conexión apunte a la cuenta correcta y revisa en Instagram.</td></tr>
       <tr><td>«Falló (definitivo)» en muchos elementos</td><td>Meta rechaza el envío: permisos, comentario borrado, ya respondido por otra herramienta, o la persona no puede recibir mensajes.</td><td>Revisa el código seguro. Comprueba permisos y que ninguna otra herramienta responda esos comentarios.</td></tr>
-      <tr><td>Otra herramienta o las respuestas automáticas de Instagram respondieron primero</td><td>Meta permite <strong>un solo mensaje privado por comentario</strong>: el primero en enviarlo gana.</td><td>No uses dos herramientas sobre la misma publicación. Desactiva la otra automatización o no crees la de Social Desk ahí.</td></tr>
+      <tr><td>Otra herramienta o las respuestas automáticas de Instagram respondieron primero</td><td>Meta permite <strong>un solo mensaje privado por comentario</strong>: el primero en enviarlo gana.</td><td>No uses dos herramientas sobre la misma publicación. Desactiva la otra automatización o no crees la de NaniChat ahí.</td></tr>
       <tr><td>Muchos «Falló (reintentable)»</td><td>Límite de velocidad de Meta.</td><td>Espera: la app reintenta sola con pausas. Reduce el volumen si se repite.</td></tr>
       <tr><td>Elementos «Expirado»</td><td>Pasaron 7 días desde el comentario antes de poder enviar.</td><td>No hay solución en la app. Mantén el monitoreo encendido o revisa pendientes con más frecuencia.</td></tr>
       <tr><td>La app no responde en el navegador</td><td>La app está cerrada, el computador se suspendió o cambiaste de puerto.</td><td>Abre la terminal, ejecuta <code>npm start</code> y abre la dirección correcta. Después enciende el monitoreo.</td></tr>
@@ -1505,7 +1505,7 @@
   <p>Sí: crea una conexión por token y selecciona cada cuenta. Usa el selector de cuenta del menú lateral para trabajar con una a la vez. Recuerda que, sin la revisión de Meta, solo puedes usar cuentas propias o que administras.</p>
 
   <h3>¿Puedo ofrecer esto a mis clientes?</h3>
-  <p>No tal como está. Atender cuentas de otras personas exige revisión de la app y verificación del negocio por parte de Meta (capítulo 6), y Social Desk es una herramienta local de un solo usuario.</p>
+  <p>No tal como está. Atender cuentas de otras personas exige revisión de la app y verificación del negocio por parte de Meta (capítulo 6), y NaniChat es una herramienta local de un solo usuario.</p>
 
   <h3>¿Qué hago cada 60 días?</h3>
   <p>Renueva el token (capítulos 4 y 5), pégalo con <span class="ui">Editar</span>, valida con <span class="ui">Probar y descubrir</span> y enciende el monitoreo.</p>
@@ -1525,9 +1525,9 @@
   </header>
   <dl class="glossary">
     <div><dt>Acceso estándar / avanzado</dt><dd>Niveles de acceso de Meta. El estándar basta para tus propias cuentas; el avanzado, necesario para cuentas de terceros, requiere revisión de la app y verificación del negocio.</dd></div>
-    <div><dt>App de Meta</dt><dd>El registro que creas en el panel de desarrolladores de Meta para obtener permisos y tokens. No es Social Desk.</dd></div>
+    <div><dt>App de Meta</dt><dd>El registro que creas en el panel de desarrolladores de Meta para obtener permisos y tokens. No es NaniChat.</dd></div>
     <div><dt>App Review (revisión de la app)</dt><dd>Proceso en el que Meta comprueba cómo usa tu app cada permiso antes de concederle acceso avanzado.</dd></div>
-    <div><dt>Automatización</dt><dd>Regla de Social Desk: palabras clave + mensaje + publicación (o todas).</dd></div>
+    <div><dt>Automatización</dt><dd>Regla de NaniChat: palabras clave + mensaje + publicación (o todas).</dd></div>
     <div><dt>Automatización general</dt><dd>La que aplica a todas las publicaciones de la cuenta que no tengan su propia automatización activa.</dd></div>
     <div><dt>Cola</dt><dd>Lista de respuestas creadas por la app, con su estado e historial.</dd></div>
     <div><dt>Corte (cutoff)</dt><dd>Momento en que activaste una automatización. Solo cuentan comentarios posteriores.</dd></div>
@@ -1610,7 +1610,7 @@
     <li>Cómo revocar el acceso de una app o un token filtrado.</li>
   </ul>
 
-  <h2>Límites conocidos de Social Desk</h2>
+  <h2>Límites conocidos de NaniChat</h2>
   <table class="compact">
     <thead><tr><th style="width:34%">Límite</th><th>Detalle</th></tr></thead>
     <tbody>
@@ -1629,7 +1629,7 @@
       <tr><td>Revisión de Meta</td><td>Hoy no está preparada para la revisión de Meta; úsala solo con cuentas propias o que administras.</td></tr>
     </tbody>
   </table>
-  <p class="note">Social Desk no está afiliada a Meta Platforms, Inc. Instagram y Facebook son marcas de sus respectivos titulares.</p>
+  <p class="note">NaniChat no está afiliada a Meta Platforms, Inc. Instagram y Facebook son marcas de sus respectivos titulares.</p>
 </section>
 
 </div>
