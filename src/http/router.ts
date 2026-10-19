@@ -1,3 +1,4 @@
+import { purgeAccount, accountHasSendHistory } from '../db/account-purge.ts';
 import { AccountAdoptionRequiredError, DomainRejectionError, PlatformFeatureNotSupportedError, PlatformNotSupportedError, ProviderRequestError } from '../core/errors.ts';
 import { randomBytes } from 'node:crypto';
 import type { IncomingMessage, ServerResponse } from 'node:http';
@@ -196,6 +197,14 @@ async function route(
     }
     if (action === 'disconnect' && method === 'POST') { await service.disconnect(connectionId); return send(response, 200, { ok: true }); }
     if (action === 'delete' && method === 'POST') { await service.delete(connectionId); return send(response, 200, { ok: true }); }
+  }
+  const accountDeleteMatch = path.match(/^\/api\/accounts\/([^/]+)\/delete$/u);
+  if (accountDeleteMatch && method === 'POST') {
+    // Hard delete of a disconnected account without send history (see purgeAccount); history is never hidden instead.
+    const selected = accountId(decodeURIComponent(accountDeleteMatch[1]!), db);
+    if (body.confirmed !== true) throw new Error('confirmation_required');
+    const { removedConnection } = purgeAccount(db, selected);
+    return send(response, 200, { deleted: true, removedConnection });
   }
   if (path === '/api/accounts/orphaned' && method === 'GET') return send(response, 200, { accounts: listOrphanedAccounts(db) });
   if (path === '/api/accounts' && method === 'GET') return send(response, 200, { accounts: listAccounts(db, accountFilter(url)) });
@@ -544,10 +553,10 @@ function listOrphanedAccounts(db: DatabaseSync) {
   const rows = db.prepare(`SELECT a.account_id AS accountId, a.username, a.display_name AS displayName,
       c.name AS previousConnectionName, c.deleted_at AS deletedAt,
       (SELECT COUNT(*) FROM queue_items q WHERE q.account_id = a.account_id) AS queueItems,
-      (SELECT COUNT(*) FROM automations m WHERE m.account_id = a.account_id) AS automations
+      (SELECT COUNT(*) FROM automations m WHERE m.account_id = a.account_id) AS automations, a.status AS status
       FROM social_accounts a JOIN connections c ON c.id = a.connection_id
       WHERE c.status = 'disconnected' ORDER BY a.username, a.account_id`).all() as Array<Record<string, unknown>>;
-  return rows.map(({ deletedAt, ...row }) => ({ ...row, connectionDeleted: deletedAt != null }));
+  return rows.map(({ deletedAt, ...row }) => ({ ...row, connectionDeleted: deletedAt != null, hasSendHistory: accountHasSendHistory(db, String(row.accountId)) }));
 }
 
 function listAccounts(db: DatabaseSync, selected?: string): Array<Record<string, unknown> & { accountId: string }> {
@@ -557,7 +566,7 @@ function listAccounts(db: DatabaseSync, selected?: string): Array<Record<string,
       (SELECT reason_code FROM account_send_holds WHERE account_id=social_accounts.account_id) AS sendHoldReason
       FROM social_accounts ${selected ? 'WHERE account_id=?' : ''} ORDER BY username, account_id`)
     .all(...(selected ? [selected] : [])) as Array<Record<string, unknown> & { accountId: string }>;
-  return rows.map((row) => ({ ...row, monitoringPaused: Boolean(row.monitoringPaused) }));
+  return rows.map((row) => ({ ...row, monitoringPaused: Boolean(row.monitoringPaused), hasSendHistory: accountHasSendHistory(db, row.accountId) }));
 }
 
 function listMedia(db: DatabaseSync, selected?: string) {

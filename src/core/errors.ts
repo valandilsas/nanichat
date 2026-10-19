@@ -21,7 +21,7 @@ export class AccountAdoptionRequiredError extends RepositoryConflictError {
  * A user-actionable business rule refused the operation. Carries ONLY a stable code (the router returns it as the
  * 409 body); the English message stays for logs and tests and is never sent to the browser.
  */
-export const DOMAIN_REJECTION_CODES = ['automation_not_enabled', 'account_not_validated', 'account_send_hold'] as const;
+export const DOMAIN_REJECTION_CODES = ['automation_not_enabled', 'account_not_validated', 'account_send_hold', 'account_not_disconnected', 'account_has_send_history'] as const;
 export type DomainRejectionCode = typeof DOMAIN_REJECTION_CODES[number];
 
 export class DomainRejectionError extends Error {

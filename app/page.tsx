@@ -6,6 +6,7 @@ import { mediaLabel, mediaTypeLabel, shortCaption, shortId } from './media-label
 import { shouldHandleShortcut, AI_COMPLAINT_HINT, AI_ERROR_LABELS, AI_LOCAL_PRIVACY_NOTE, AI_LOCAL_RESOURCE_NOTE, AI_PRIVACY_NOTICE, AI_WINDOW_LABELS, LOCAL_MODEL_INFO, aiReviewGate, localModelCardState, type DownloadView, type LocalModelEntryView, AUTO_HIDE_OPTIONS, aiJobSummary, aiProgressPercent, aiProgressText, availableActions, bulkAllowed, bulkSummary, categoryLabel, reasonsText, stateLabel as moderationStateLabel, type BulkResultView } from './moderation-labels';
 import { autoPickAutomation, describeQueuePayload, type PendingItem, type PendingPage } from './pending-review';
 import { DOMAIN_REJECTION_LABELS, realModeAction } from './automation-actions';
+import { deleteAccountAction, deleteAccountConfirmation } from './account-actions';
 import { GENERAL_MEDIA_OPTION, automationTargetLabel, automationTargetPayload } from './automation-scope';
 import { deriveOnboarding, showOnboarding as shouldShowOnboarding } from './onboarding';
 import { formatElapsed, progressPercent, progressText, reasonLabel, summarizeScan, type ScanProgressDto } from './scan-summary';
@@ -34,7 +35,8 @@ import {
 import { PUBLIC_REPLY_SAMPLE_USERNAME, describePublicReply, parseVariantLines, previewExamples, publicReplyErrorHint, type PublicReplyDto, variantCountLabel } from './public-reply';
 import { composeButtonLinksText } from '../src/core/domain';
 
-type Account = { accountId: string; connectionId: string; username: string; platform?: string; status: string; monitoringPaused: boolean; sendHoldReason?: string | null; last_sync?: string; last_error?: string; coverage?: string };
+type Account = { accountId: string; connectionId: string; username: string; platform?: string; status: string; monitoringPaused: boolean; sendHoldReason?: string | null; hasSendHistory?: boolean; last_sync?: string; last_error?: string; coverage?: string };
+type DeletableAccount = { accountId: string; username: string; platform?: string };
 type Candidate = { connectionId: string; providerAccountId: string; username: string; platform?: string };
 type Connection = { id: string; name: string; login_kind: string; app_id?: string | null; graph_version: string; status: string; last_validated_at: string | null };
 type Media = { accountId: string; mediaId: string; permalink?: string; publishedAt?: string; caption?: string | null; mediaType?: string | null; thumbnailUrl?: string | null };
@@ -232,6 +234,20 @@ export default function HomePage() {
     }
   }, [refresh]);
 
+  // Hard delete of a disconnected account. The picker is reset BEFORE the data refresh so no request targets the deleted id.
+  const deleteAccount = useCallback(async (account: DeletableAccount): Promise<boolean> => {
+    if (!(await confirm(deleteAccountConfirmation(accountHandleOrFallback(account))))) return false;
+    setError(''); setNotice('');
+    try {
+      await api(`/api/accounts/${encodeURIComponent(account.accountId)}/delete`, 'POST', { confirmed: true });
+      setAllAccounts((previous) => previous.filter((item) => item.accountId !== account.accountId));
+      setNotice('Cuenta eliminada.');
+      if (accountFilter === account.accountId) chooseAccount('all'); // the filter change triggers the refresh
+      else await refresh();
+      return true;
+    } catch (cause) { setError(errorStateFor(cause)); return false; }
+  }, [accountFilter, api, chooseAccount, confirm, refresh]);
+
   // Real mode is only ever shown when the server explicitly said dryRun === false.
   const mode: 'checking' | 'dry' | 'real' = dashboard?.dryRun === true ? 'dry' : dashboard?.dryRun === false ? 'real' : 'checking';
   const current = sections.find(([id]) => id === section) ?? sections[0];
@@ -306,7 +322,7 @@ export default function HomePage() {
         {loading && <div className="loading-line" role="status"><span>Actualizando datos locales…</span></div>}
         <div className={`content content-${section}`}>
           {section === 'dashboard' && <DashboardView data={dashboard} accounts={accounts} connections={connections} automations={automations} queue={queue} mode={mode} nani={nani} pendingFlags={pendingFlags} reviewItems={reviewItems} accountFilter={accountFilter} accountCount={allAccounts.length} accountLabel={accountLabel} queueFiltered={queueState !== 'all' || queueOffset > 0} queueScope={queueScope} onNavigate={setSection} onCelebrate={celebrate} api={api} act={act} />}
-          {section === 'connections' && <ConnectionsView connections={connections} accounts={accounts} candidates={candidates} setCandidates={setCandidates} api={api} act={act} confirm={confirm} features={features} />}
+          {section === 'connections' && <ConnectionsView connections={connections} accounts={accounts} candidates={candidates} setCandidates={setCandidates} api={api} act={act} confirm={confirm} features={features} onDeleteAccount={deleteAccount} />}
           {section === 'media' && <MediaView accounts={accounts} allAccounts={allAccounts} onSelectAccount={chooseAccount} media={media} selected={accountFilter} onNavigate={setSection} api={api} act={act} />}
           {section === 'automations' && <AutomationView accounts={accounts} media={media} rows={automations} selected={accountFilter} api={api} act={act} confirm={confirm} />}
           {section === 'moderation' && selectedAccount && platformOf(selectedAccount) === 'facebook' && <Empty nani="awake" title={FACEBOOK_MODERATION_UNAVAILABLE.title} detail={FACEBOOK_MODERATION_UNAVAILABLE.detail} action={() => setSection('automations')} actionLabel="Ir a Automatizaciones" />}
@@ -314,7 +330,7 @@ export default function HomePage() {
           {section === 'monitor' && <MonitorView accounts={accounts} status={dashboard?.monitoringEnabled ?? false} onNavigate={setSection} api={api} act={act} />}
           {section === 'backlog' && <BacklogView allAccounts={allAccounts} accounts={accounts} onSelectAccount={chooseAccount} selected={accountFilter} job={scanJob} setJob={setScanJob} rows={automations} api={api} act={act} confirm={confirm} />}
           {section === 'queue' && <QueueView accounts={pickerAccounts} items={queue} total={queueTotal} offset={queueOffset} setOffset={setQueueOffset} state={queueState} setState={(value) => { setQueueOffset(0); setQueueState(value); }} onNavigate={setSection} api={api} act={act} />}
-          {section === 'settings' && <SettingsView mode={mode} act={act} api={api} confirm={confirm} features={features} />}
+          {section === 'settings' && <SettingsView mode={mode} act={act} api={api} confirm={confirm} features={features} onDeleteAccount={deleteAccount} />}
         </div>
         {section !== 'moderation' && <footer className="footer-note"><span><span className="status-dot" aria-hidden="true" /> Solo en este equipo · Datos y credenciales permanecen en el servidor local.</span></footer>}
       </main>
@@ -482,7 +498,7 @@ function DashboardView({ data, accounts, connections, automations, queue, mode, 
 
 function focusById(id: string) { const node = document.getElementById(id); node?.scrollIntoView?.({ block: 'center' }); node?.focus(); }
 
-function ConnectionsView({ connections, accounts, candidates, setCandidates, api, act, confirm, features }: { connections: Connection[]; accounts: Account[]; candidates: Array<Candidate>; setCandidates(value: Array<Candidate>): void; api: Api; act: Act; confirm: Confirm; features: Features }) {
+function ConnectionsView({ connections, accounts, candidates, setCandidates, api, act, confirm, features, onDeleteAccount }: { connections: Connection[]; accounts: Account[]; candidates: Array<Candidate>; setCandidates(value: Array<Candidate>): void; api: Api; act: Act; confirm: Confirm; features: Features; onDeleteAccount(account: DeletableAccount): Promise<boolean> }) {
   const legacyAccounts = legacyPanelAccounts(features, accounts);
   const [name, setName] = useState(''); const [loginKind, setLoginKind] = useState('instagram_login'); const [appId, setAppId] = useState(''); const [version, setVersion] = useState('v26.0'); const [token, setToken] = useState('');
   const [editing, setEditing] = useState<Connection | null>(null); const [editName, setEditName] = useState(''); const [editAppId, setEditAppId] = useState(''); const [editVersion, setEditVersion] = useState(''); const [editToken, setEditToken] = useState('');
@@ -545,7 +561,7 @@ function ConnectionsView({ connections, accounts, candidates, setCandidates, api
         </form>
       </div>
       <aside className="conn-side">
-        <section className="panel"><div className="panel-heading"><div><h3>Cuentas seleccionadas</h3><p className="muted">Los ID se obtienen de la respuesta oficial de Meta.</p></div></div>{accounts.length ? <div className="avatar-tiles">{accounts.map((account) => <div className="list-row avatar-tile" key={account.accountId}><RingAvatar username={account.username} /><div className="list-row-text"><strong>{accountHandle(account)}</strong><span className="muted">{platformBadge(account, accounts) ? `${platformBadge(account, accounts)} · ` : ''}{account.status === 'valid' ? 'Validada' : account.status} · {account.accountId}</span></div></div>)}</div> : <p className="empty-inline">Aún no hay cuentas seleccionadas. Pruebe una conexión y pulse «Seleccionar» en la cuenta que desea usar.</p>}</section>
+        <section className="panel"><div className="panel-heading"><div><h3>Cuentas seleccionadas</h3><p className="muted">Los ID se obtienen de la respuesta oficial de Meta.</p></div></div>{accounts.length ? <div className="avatar-tiles">{accounts.map((account) => <div className="list-row avatar-tile" key={account.accountId}><RingAvatar username={account.username} /><div className="list-row-text"><strong>{accountHandle(account)}</strong><span className="muted">{platformBadge(account, accounts) ? `${platformBadge(account, accounts)} · ` : ''}{account.status === 'valid' ? 'Validada' : account.status} · {account.accountId}</span></div>{(() => { const remove = deleteAccountAction(account); return remove.visible && <button type="button" className="btn-icon danger" aria-label="Eliminar cuenta" title={remove.hint ?? 'Eliminar cuenta'} disabled={remove.disabled} onClick={() => void onDeleteAccount(account)}><Trash2 size={15} aria-hidden="true" /></button>; })()}{deleteAccountAction(account).hint && <span className="muted">{deleteAccountAction(account).hint}</span>}</div>)}</div> : <p className="empty-inline">Aún no hay cuentas seleccionadas. Pruebe una conexión y pulse «Seleccionar» en la cuenta que desea usar.</p>}</section>
         <section className="panel"><h3>Cuentas descubiertas</h3>{candidates.length ? <div className="avatar-tiles">{candidates.map((candidate) => <div className="list-row avatar-tile" key={candidate.providerAccountId}><RingAvatar username={candidate.username}/><div className="list-row-text"><strong>{accountHandle(candidate)}</strong><span className="muted">{platformBadge(candidate, candidates) ? `${platformBadge(candidate, candidates)} · ` : ''}ID de proveedor: {candidate.providerAccountId}</span></div><button className="btn-main small" onClick={() => void selectCandidate(candidate, false)}>Seleccionar</button></div>)}</div> : <p className="empty-inline">{discoveredEmpty ? DISCOVERY_EMPTY_HINT : 'Pulse «Probar y descubrir» en una conexión para listar las cuentas disponibles.'}</p>}{pendingAdopt && <div className="adopt-notice" role="alertdialog" aria-label="Confirmar adopción de cuenta"><p><strong>{accountHandle(pendingAdopt)}</strong>: {ADOPTION_PROMPT}</p><div className="row-actions"><button className="btn-main small" onClick={() => void selectCandidate(pendingAdopt, true)}>Adoptar</button><button className="btn small" onClick={() => setPendingAdopt(null)}>Cancelar</button></div></div>}</section>
         {legacyAccounts.length > 0 && <section className="panel"><h3>Retención heredada</h3><p className="muted">{features.legacyInterlock ? 'Una cuenta usada antes con otra herramienta puede tener un bloqueo o historial de rechazos previos. La aplicación nunca borra ni modifica esos archivos.' : 'Esta cuenta conserva una retención de una configuración heredada anterior. Revísela y reconózcala para liberarla.'}</p><div className="avatar-tiles">{legacyAccounts.map((account) => <div className="list-row avatar-tile" key={`legacy-${account.accountId}`}><RingAvatar username={account.username} /><div className="list-row-text"><strong>@{account.username}</strong></div><button className="btn small" onClick={() => void acknowledgeLegacy(account)}>Revisar estado y reconocer</button></div>)}</div></section>}
       </aside>
@@ -1012,10 +1028,14 @@ function FollowGateDetail({ item, events }: { item: QueueItem; events: Array<{ t
   </div>;
 }
 
-type OrphanedAccount = { accountId: string; username: string; displayName: string | null; previousConnectionName: string; connectionDeleted: boolean; queueItems: number; automations: number };
-function SettingsView({ mode, api, act, confirm, features }: { mode: 'checking' | 'dry' | 'real'; api: Api; act: Act; confirm: Confirm; features: Features }) {
+type OrphanedAccount = { accountId: string; status?: string; hasSendHistory?: boolean; username: string; displayName: string | null; previousConnectionName: string; connectionDeleted: boolean; queueItems: number; automations: number };
+function SettingsView({ mode, api, act, confirm, features, onDeleteAccount }: { mode: 'checking' | 'dry' | 'real'; api: Api; act: Act; confirm: Confirm; features: Features; onDeleteAccount(account: DeletableAccount): Promise<boolean> }) {
   const [orphans, setOrphans] = useState<OrphanedAccount[]>([]);
-  useEffect(() => { void api('/api/accounts/orphaned').then((value) => setOrphans(Array.isArray(value.accounts) ? value.accounts : [])).catch(() => setOrphans([])); }, [api]);
+  const loadOrphans = useCallback(() => api('/api/accounts/orphaned').then((value) => setOrphans(Array.isArray(value.accounts) ? value.accounts : [])).catch(() => setOrphans([])), [api]);
+  useEffect(() => { void loadOrphans(); }, [loadOrphans]);
+  async function deleteOrphan(account: OrphanedAccount) {
+    if (await onDeleteAccount({ accountId: account.accountId, username: account.username })) await loadOrphans();
+  }
   async function importEnv() {
     if (!(await confirm({ title: 'Importar .env del proyecto', body: 'Se leerá una vez el archivo .env configurado en SOCIAL_DESK_IMPORT_ENV_PATH y se importarán únicamente credenciales Meta permitidas, cifradas como una conexión nueva. El archivo no se modifica y el secreto no se muestra.', confirmLabel: 'Importar credenciales' }))) return;
     await act(() => api('/api/settings/import-root-env', 'POST', { confirmed: true }), 'Conexión importada de forma cifrada. Valídela y seleccione la cuenta.');
@@ -1026,7 +1046,7 @@ function SettingsView({ mode, api, act, confirm, features }: { mode: 'checking' 
       <div className="settings-row"><span className={mode === 'real' ? 'ic bad' : 'ic warn'} aria-hidden="true">{mode === 'real' ? <Siren size={17} /> : <FlaskConical size={17} />}</span><div><strong>Modo de envío</strong><span className="muted">{mode === 'checking' ? 'Verificando el modo de envío…' : mode === 'dry' ? 'Dry Run activo: no se envían respuestas.' : 'Modo real activo; requiere automatizaciones autorizadas.'}</span></div>{mode === 'checking' ? <Status value="Verificando…" tone="neutral" /> : mode === 'dry' ? <Status value="Dry Run" tone="good" /> : <Status value="Modo real" tone="warn" />}</div>
       <div className="settings-row"><span className="ic accent" aria-hidden="true"><FileDown size={17} /></span><div><strong>Importar configuración existente</strong><span className="muted">{features.envImport ? 'Lee únicamente variables permitidas del archivo .env configurado y cifra el token como una conexión nueva. No modifica el archivo ni muestra el secreto.' : ENV_IMPORT_DISABLED_HINT}</span></div>{features.envImport ? <button className="btn" onClick={() => void importEnv()}>Importar .env del proyecto</button> : <Status value="Desactivada" tone="neutral" />}</div>
       <div className="settings-row"><span className="ic ok" aria-hidden="true"><Lock size={17} /></span><div><strong>Protección de cuenta heredada</strong><span className="muted">{features.legacyInterlock ? 'Los bloqueos previos se verifican antes de cualquier modo real. La aplicación nunca elimina bloqueos ni contadores externos.' : 'Desactivada: no se lee ninguna carpeta de otra herramienta. Se activa con SOCIAL_DESK_LEGACY_ACCOUNTS_DIR o SOCIAL_DESK_LEGACY_HOLD_USERNAMES.'}</span></div>{features.legacyInterlock ? <Status value="Interlock local activo" tone="good" /> : <Status value="No configurada" tone="neutral" />}</div>
-      <div className="settings-row"><span className="ic lilac" aria-hidden="true"><Unplug size={17} /></span><div><strong>Cuentas de conexiones eliminadas o desconectadas</strong><span className="muted">{ORPHAN_ADOPT_STEPS} Se conservan su historial, cola y automatizaciones.</span>{orphans.length ? <ul className="orphan-list">{orphans.map((account) => <li className="muted" key={account.accountId}>@{account.username} · {orphanOrigin(account)} «{account.previousConnectionName}» · {account.queueItems} en cola · {account.automations} automatizaciones</li>)}</ul> : <span className="muted">{ORPHAN_EMPTY_TEXT}</span>}</div></div>
+      <div className="settings-row"><span className="ic lilac" aria-hidden="true"><Unplug size={17} /></span><div><strong>Cuentas de conexiones eliminadas o desconectadas</strong><span className="muted">{ORPHAN_ADOPT_STEPS} Se conservan su historial, cola y automatizaciones.</span>{orphans.length ? <ul className="orphan-list">{orphans.map((account) => <li className="muted" key={account.accountId}>@{account.username} · {orphanOrigin(account)} «{account.previousConnectionName}» · {account.queueItems} en cola · {account.automations} automatizaciones{(() => { const remove = deleteAccountAction({ status: account.status ?? 'disconnected', hasSendHistory: account.hasSendHistory }); return remove.visible && <> <button type="button" className="btn-icon danger" aria-label="Eliminar cuenta" title={remove.hint ?? 'Eliminar cuenta'} disabled={remove.disabled} onClick={() => void deleteOrphan(account)}><Trash2 size={15} aria-hidden="true" /></button>{remove.hint && <> {remove.hint}</>}</>; })()}</li>)}</ul> : <span className="muted">{ORPHAN_EMPTY_TEXT}</span>}</div></div>
     </div>
   </section>;
 }
