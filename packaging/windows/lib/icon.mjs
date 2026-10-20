@@ -1,36 +1,74 @@
-// Generates the NaniChat application icon (.ico) with Node.js built-ins only: a blue rounded square with a white
-// speech bubble and three dots. Each size is a 32-bit BGRA DIB (the most widely supported ICO image format,
-// accepted by Inno Setup's SetupIconFile and by Windows shortcuts), anti-aliased by 4x4 supersampling.
+// Generates the NaniChat application icon (.ico) with Node.js built-ins only: the Nani mascot (the same speech
+// bubble as app/components/Nani.tsx: pink body, cheeks, dark eyes and smile) on a transparent background. Each size
+// is a 32-bit BGRA DIB (the most widely supported ICO image format, accepted by Inno Setup's SetupIconFile and by
+// Windows shortcuts), anti-aliased by 4x4 supersampling. Coordinates are the mascot's 120x120 viewBox.
 
-const BACKGROUND = [0x25, 0x63, 0xeb]; // RGB #2563eb
-const FOREGROUND = [0xff, 0xff, 0xff];
 const SAMPLES = 4;
+const VIEWBOX = 120;
+const BODY = [0xff, 0x6b, 0x8b]; // --pink
+const CHEEK = [0xff, 0x9e, 0xb4]; // .nani-cheek
+const INK = [0x1a, 0x0d, 0x12]; // --on-color (eyes and mouth)
 
-function insideRoundedRect(x, y, left, top, right, bottom, radius) {
-  if (x < left || x > right || y < top || y > bottom) return false;
-  const cx = Math.min(Math.max(x, left + radius), right - radius);
-  const cy = Math.min(Math.max(y, top + radius), bottom - radius);
-  return (x - cx) ** 2 + (y - cy) ** 2 <= radius ** 2;
+/** Flattens the mascot body (the `d` of .nani-body in Nani.tsx) into a polygon of viewBox points. */
+function bodyPolygon() {
+  const points = [];
+  const cubic = (p0, p1, p2, p3, steps = 24) => {
+    for (let i = 1; i <= steps; i++) {
+      const t = i / steps;
+      const u = 1 - t;
+      points.push([
+        u ** 3 * p0[0] + 3 * u * u * t * p1[0] + 3 * u * t * t * p2[0] + t ** 3 * p3[0],
+        u ** 3 * p0[1] + 3 * u * u * t * p1[1] + 3 * u * t * t * p2[1] + t ** 3 * p3[1],
+      ]);
+    }
+  };
+  // M60 10 c28 0 50 19 50 44 s-22 44 -50 44 c-6 0 -12 -1 -17 -2.6 L22 106 c-3 1.5 -6 -1.5 -4.6 -4.5 l6 -14
+  // C16 79.6 10 67.6 10 54 10 29 32 10 60 10 z
+  points.push([60, 10]);
+  cubic([60, 10], [88, 10], [110, 29], [110, 54]);
+  cubic([110, 54], [110, 79], [88, 98], [60, 98]);
+  cubic([60, 98], [54, 98], [48, 97], [43, 95.4]);
+  points.push([22, 106]);
+  cubic([22, 106], [19, 107.5], [16, 104.5], [17.4, 101.5]);
+  points.push([23.4, 87.5]);
+  cubic([23.4, 87.5], [16, 79.6], [10, 67.6], [10, 54]);
+  cubic([10, 54], [10, 29], [32, 10], [60, 10]);
+  return points;
 }
 
-function insideTriangle(x, y, [ax, ay], [bx, by], [cx, cy]) {
-  const d1 = (x - bx) * (ay - by) - (ax - bx) * (y - by);
-  const d2 = (x - cx) * (by - cy) - (bx - cx) * (y - cy);
-  const d3 = (x - ax) * (cy - ay) - (cx - ax) * (y - ay);
-  const negative = d1 < 0 || d2 < 0 || d3 < 0;
-  const positive = d1 > 0 || d2 > 0 || d3 > 0;
-  return !(negative && positive);
+const BODY_POLYGON = bodyPolygon();
+
+function insidePolygon(x, y, polygon) {
+  let inside = false;
+  for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
+    const [xi, yi] = polygon[i];
+    const [xj, yj] = polygon[j];
+    if ((yi > y) !== (yj > y) && x < ((xj - xi) * (y - yi)) / (yj - yi) + xi) inside = !inside;
+  }
+  return inside;
 }
 
-/** Coverage of the background square and of the white bubble at a point in unit coordinates (0..1). */
-function shapeAt(x, y) {
-  const square = insideRoundedRect(x, y, 0, 0, 1, 1, 0.22);
-  if (!square) return 'none';
-  const dot = [0.36, 0.5, 0.64].some((dx) => (x - dx) ** 2 + (y - 0.45) ** 2 <= 0.05 ** 2);
-  if (dot) return 'background';
-  const bubble = insideRoundedRect(x, y, 0.18, 0.24, 0.82, 0.66, 0.1)
-    || insideTriangle(x, y, [0.3, 0.6], [0.3, 0.82], [0.5, 0.6]);
-  return bubble ? 'foreground' : 'background';
+const insideEllipse = (x, y, cx, cy, rx, ry) => ((x - cx) / rx) ** 2 + ((y - cy) / ry) ** 2 <= 1;
+
+/** Distance from a point to the quadratic curve `M x0 y0 q cx cy x1 y1` (sampled), for the stroked smile. */
+function nearQuadratic(x, y, [x0, y0], [cx, cy], [x1, y1], half) {
+  for (let i = 0; i <= 24; i++) {
+    const t = i / 24;
+    const u = 1 - t;
+    const qx = u * u * x0 + 2 * u * t * cx + t * t * x1;
+    const qy = u * u * y0 + 2 * u * t * cy + t * t * y1;
+    if ((x - qx) ** 2 + (y - qy) ** 2 <= half ** 2) return true;
+  }
+  return false;
+}
+
+/** Color of the mascot at a point in viewBox coordinates, or null where the icon is transparent. */
+function colorAt(x, y) {
+  if (x < 10 || x > 110 || y < 10 || y > 107 || !insidePolygon(x, y, BODY_POLYGON)) return null; // bounding box first: cheap reject
+  if (insideEllipse(x, y, 45, 50, 6, 8) || insideEllipse(x, y, 75, 50, 6, 8)) return INK;
+  if (nearQuadratic(x, y, [50, 68], [60, 76], [70, 68], 2.2)) return INK; // smile (M50 68 q10 8 20 0), stroke 3.2 + margin
+  if (insideEllipse(x, y, 36, 66, 7, 4) || insideEllipse(x, y, 84, 66, 7, 4)) return CHEEK;
+  return BODY;
 }
 
 /** Returns size*size BGRA pixels, top row first. */
@@ -39,21 +77,22 @@ function renderPixels(size) {
   for (let py = 0; py < size; py++) {
     for (let px = 0; px < size; px++) {
       let covered = 0;
-      let white = 0;
+      const sum = [0, 0, 0];
       for (let sy = 0; sy < SAMPLES; sy++) {
         for (let sx = 0; sx < SAMPLES; sx++) {
-          const shape = shapeAt((px + (sx + 0.5) / SAMPLES) / size, (py + (sy + 0.5) / SAMPLES) / size);
-          if (shape !== 'none') covered++;
-          if (shape === 'foreground') white++;
+          const color = colorAt(((px + (sx + 0.5) / SAMPLES) / size) * VIEWBOX, ((py + (sy + 0.5) / SAMPLES) / size) * VIEWBOX);
+          if (!color) continue;
+          covered++;
+          sum[0] += color[0];
+          sum[1] += color[1];
+          sum[2] += color[2];
         }
       }
-      const offset = (py * size + px) * 4;
       if (covered === 0) continue;
-      const mix = white / covered;
-      const channel = (index) => Math.round(BACKGROUND[index] * (1 - mix) + FOREGROUND[index] * mix);
-      pixels[offset] = channel(2);
-      pixels[offset + 1] = channel(1);
-      pixels[offset + 2] = channel(0);
+      const offset = (py * size + px) * 4;
+      pixels[offset] = Math.round(sum[2] / covered);
+      pixels[offset + 1] = Math.round(sum[1] / covered);
+      pixels[offset + 2] = Math.round(sum[0] / covered);
       pixels[offset + 3] = Math.round((255 * covered) / (SAMPLES * SAMPLES));
     }
   }

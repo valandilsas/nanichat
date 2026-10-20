@@ -481,3 +481,22 @@ test('isLockRefusal detects the application lock refusal and startupFailureMessa
   assert.match(lock, /Archivo > Salir/);
   assert.match(startupFailureMessage({ lockRefused: false, timeoutSeconds: 90 }), /90 segundos/);
 });
+
+test('the application icon draws the Nani mascot: pink body, dark eyes, transparent corners', async () => {
+  const { createIco } = await loadMjs<{ createIco(sizes: readonly number[]): Buffer }>('packaging/windows/lib/icon.mjs');
+  const { rgbaFromIcoEntry } = await loadMjs<{ rgbaFromIcoEntry(ico: Buffer, index: number): { size: number; rgba: Buffer } }>('packaging/desktop/icons.mjs');
+  const { size, rgba } = rgbaFromIcoEntry(createIco([256]), 0);
+  assert.equal(size, 256);
+  // Coordinates are in the mascot's 120x120 viewBox (app/components/Nani.tsx), scaled to the icon size.
+  const at = (x: number, y: number): number[] => {
+    const offset = (Math.round((y / 120) * size) * size + Math.round((x / 120) * size)) * 4;
+    return [rgba[offset]!, rgba[offset + 1]!, rgba[offset + 2]!, rgba[offset + 3]!];
+  };
+  const near = (actual: number[], expected: number[]): boolean => expected.every((value, index) => Math.abs(actual[index]! - value) <= 6);
+  assert.ok(near(at(60, 24), [0xff, 0x6b, 0x8b, 255]), `body is --pink (#FF6B8B), got ${at(60, 24)}`);
+  assert.ok(near(at(45, 50), [0x1a, 0x0d, 0x12, 255]), `left eye is --on-color (#1A0D12), got ${at(45, 50)}`);
+  assert.ok(near(at(75, 50), [0x1a, 0x0d, 0x12, 255]), 'right eye is --on-color');
+  assert.ok(near(at(36, 66), [0xff, 0x9e, 0xb4, 255]) || at(36, 66)[0]! > 0xf0, 'cheek is lighter pink');
+  assert.equal(at(1, 1)[3], 0, 'top-left corner is transparent');
+  assert.equal(at(118, 118)[3], 0, 'bottom-right corner is transparent');
+});
